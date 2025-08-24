@@ -1,0 +1,8 @@
+{
+  "name": "Copy of CartelWorx",
+  "description": "An intelligent, end-to-end web app that empowers drivers and mechanics with next-generation vehicle health, tuning, and maintenance tools using AI.",
+  "requestFramePermissions": [
+    "microphone",
+    "geolocation"
+  ]
+}
