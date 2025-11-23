@@ -6,6 +6,7 @@ import ModernThemeDashboard from './dashboards/ModernThemeDashboard';
 import ClassicThemeDashboard from './dashboards/ClassicThemeDashboard';
 import HaltechDashboard from './dashboards/HaltechDashboard';
 import MinimalistDashboard from './dashboards/MinimalistDashboard';
+import ProTunerDashboard from './dashboards/ProTunerDashboard';
 
 const Dashboard: React.FC = () => {
   const { theme } = useContext(AppearanceContext);
@@ -22,6 +23,8 @@ const Dashboard: React.FC = () => {
         return <HaltechDashboard />;
       case 'minimalist':
         return <MinimalistDashboard />;
+      case 'pro-tuner':
+        return <ProTunerDashboard />;
       default:
         return <RallyThemeDashboard />;
     }

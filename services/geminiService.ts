@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { MaintenanceRecord, SensorDataPoint, TuningSuggestion, VoiceCommandIntent, DiagnosticAlert } from '../types';
 
@@ -271,7 +272,7 @@ export const generateComponentImage = async (componentName: string): Promise<str
     const prompt = `A high-resolution, photorealistic image of a single automotive '${componentName}' for a 2022 Subaru WRX, isolated on a clean white background. Studio lighting.`;
 
     const response = await ai.models.generateImages({
-        model: 'imagen-3.0-generate-002',
+        model: 'imagen-4.0-generate-001',
         prompt: prompt,
         config: {
           numberOfImages: 1,
@@ -322,7 +323,7 @@ export const getCoPilotResponse = async (
     4.  **Keep it Brief**: Remember, your response will be spoken aloud. Aim for one or two short sentences.
 
     **Example Responses**:
-    - *User Command: "Hey KC, what's going on?" with a MAP sensor alert active.* -> "I've detected a critical fault with the MAP sensor. Readings are erratic, which could cause a stall. I recommend pulling over to inspect it."
+    - *User Command: "Hey KC, what's my status?" with a MAP sensor alert active.* -> "I've detected a critical fault with the MAP sensor. Readings are erratic, which could cause a stall. I recommend pulling over to inspect it."
     - *User Command: "What's my current boost?"* -> "You're currently at ${vehicleData.turboBoost.toFixed(2)} bar of boost."
     - *User Command: "Is everything okay?" with no alerts.* -> "Yes, all systems are nominal. Everything looks good."
     - *User Command: "Tell me about my engine."* -> "Your engine is running at ${vehicleData.rpm.toFixed(0)} RPM, with a coolant temperature of ${vehicleData.engineTemp.toFixed(1)} degrees Celsius. Oil pressure is stable."

@@ -57,7 +57,7 @@ const Diagnostics: React.FC = () => {
         <h2 className="text-xl font-bold text-gray-100 font-display">Natural Language Diagnostics</h2>
         <p className="text-sm text-gray-400">Ask KC for help</p>
       </div>
-      <div className="flex-1 p-4 overflow-y-auto">
+      <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
         <div className="space-y-4">
           {messages.map((msg) => (
             <div key={msg.id} className={`flex items-start gap-3 ${msg.sender === 'user' ? 'justify-end' : ''}`}>

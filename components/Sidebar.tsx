@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { NavLink } from 'react-router-dom';
+import React, { useState } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 import GaugeIcon from './icons/GaugeIcon';
 import ChatIcon from './icons/ChatIcon';
 import WrenchIcon from './icons/WrenchIcon';
@@ -12,6 +12,8 @@ import HederaIcon from './icons/HederaIcon';
 import StopwatchIcon from './icons/StopwatchIcon';
 import PaintBrushIcon from './icons/PaintBrushIcon';
 import SoundWaveIcon from './icons/SoundWaveIcon';
+import { useVehicleData } from '../hooks/useVehicleData';
+import { ObdConnectionState } from '../types';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: GaugeIcon },
@@ -27,49 +29,155 @@ const navigation = [
   { name: 'Hedera DLT', href: '/hedera', icon: HederaIcon },
 ];
 
-const logoBase64 = `data:image/jpeg;base64,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DEfiP/ANn/ANzaA9GopftL4J9Z/wCZ/Yv/ADX/AJP9I/pn0H6n9V/+E/8ACf8A+s/8P8A2/N/uP4J+s/tH/iv/hf/AOF+1sI/Z/7L/Z/6T+mfRvtH/if7Py/6eweiVFSt9x8D/Wf2j/xX/wAL/wD/AIv7Vwj9n/sr9n/pP6Z9G+0f+J/s/L/p7F/uPgf6z+0f+K/+F//APF/auEfs/8AZX7P/Sf0z6N9o/8AE/2fl/09g9EqKlf7j4H+s/tH/iv/AIX/APxf2rhH7P8A2V+z/wBJ/TPo32j/AMT/AGfl/wBPYv8AcfA/1n9o/wDFf/C/8A/i/tXCP2f+yv2f8ApP6Z9G+0f+J/s/L/AKeweiVFSt9x8D/Wf2j/AMV/8L//APi/tXCP2f8Asr9n/pP6Z9G+0f8Aif7Py/6exf7jwP8AWf2j/wAV/wDC/wD/AIv7Vwj9n/sr9n/pP6Z9G+0f+J/s/L/p7B6LUVP+2OCfq/xX/xT/xH/qP2T+nfWfrf7I/8G/8Ap/p/P9X630/N7Gf+xPgf/t/1X/8Am/6t+0v1T9b+k+t/+kf8R/6X2f8A0/h/CD0GiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCiiigCii-==`;
-
 const Sidebar: React.FC = () => {
-  return (
-    <div className="w-20 md:w-64 bg-black border-r border-base-700/50 flex flex-col">
-      <div className="flex items-center justify-center md:justify-start h-20 border-b border-base-700/50 px-6">
-        <img src={logoBase64} alt="Karapiro Cartel Logo" className="w-12 h-12 rounded-full md:mr-3 object-cover" />
-        <div className="hidden md:flex md:flex-col">
-           <h1 className="text-lg font-bold text-gray-100 font-display leading-tight">Karapiro Cartel</h1>
-           <p className="text-xs text-gray-400 leading-tight">Speed Shop</p>
-        </div>
-      </div>
-      <nav className="flex-1 px-2 md:px-4 py-4 space-y-2">
-        {navigation.map((item) => (
-          <NavLink
-            key={item.name}
-            to={item.href}
-            end={item.href === '/'}
-            className={({ isActive }) =>
-              `group relative flex items-center px-4 py-3 text-sm font-medium rounded-md transition-colors duration-150 ease-in-out ${
-                isActive
-                  ? 'bg-base-800/50 text-white'
-                  : 'text-gray-400 hover:bg-base-800/30 hover:text-white'
-              }`
-            }
-          >
-            {({isActive}) => (
-              <>
-                {isActive && <div className="absolute left-0 top-0 bottom-0 w-1 bg-[var(--theme-accent-primary)] rounded-r-full shadow-glow-theme"></div>}
-                <item.icon className="h-6 w-6 mr-0 md:mr-3" aria-hidden="true" />
-                <span className="hidden md:block">{item.name}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
-      </nav>
+  const { pathname } = useLocation();
+  const { obdState, connectObd, disconnectObd } = useVehicleData();
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
-      <div className="p-4 border-t border-base-700/50">
-        <div className="hidden md:block">
-            <p className="text-xs text-gray-500">© 2024 Karapiro Cartel</p>
-            <p className="text-xs text-gray-500">Vehicle OS v1.2</p>
-        </div>
-      </div>
+  const handleConnectionClick = () => {
+    if (obdState === ObdConnectionState.Disconnected || obdState === ObdConnectionState.Error) {
+      connectObd();
+    } else {
+      disconnectObd();
+    }
+  };
+
+  const getConnectionLabel = () => {
+    switch (obdState) {
+      case ObdConnectionState.Connected: return 'LINK ACTIVE';
+      case ObdConnectionState.Connecting: return 'LINKING...';
+      case ObdConnectionState.Initializing: return 'INIT PROTOCOL';
+      case ObdConnectionState.Error: return 'LINK ERROR';
+      default: return 'CONNECT OBD';
+    }
+  };
+
+  const getConnectionColor = () => {
+    switch (obdState) {
+      case ObdConnectionState.Connected: return 'text-brand-green neon-text-green';
+      case ObdConnectionState.Connecting:
+      case ObdConnectionState.Initializing: return 'text-yellow-400 animate-pulse';
+      case ObdConnectionState.Error: return 'text-brand-red neon-text-red';
+      default: return 'text-gray-500';
+    }
+  };
+
+  return (
+    <div 
+      className={`hidden md:flex flex-col h-full z-50 transition-all duration-300 ease-in-out relative ${isCollapsed ? 'w-20' : 'w-72'}`}
+    >
+       {/* Glassmorphism Container */}
+       <div className="flex flex-col h-full bg-black/40 backdrop-blur-xl border-r border-white/10 shadow-[10px_0_30px_rgba(0,0,0,0.5)] overflow-hidden relative">
+          
+          {/* Toggle Button */}
+          <button 
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="absolute -right-3 top-8 w-6 h-6 bg-black border border-white/20 rounded-full flex items-center justify-center text-brand-cyan hover:text-white hover:scale-110 transition-all z-50 shadow-[0_0_10px_rgba(0,240,255,0.3)]"
+            aria-label={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          >
+             <svg 
+               className={`w-3 h-3 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} 
+               fill="none" 
+               viewBox="0 0 24 24" 
+               stroke="currentColor"
+             >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" />
+             </svg>
+          </button>
+
+          {/* Brand Header */}
+          <div className={`flex items-center h-24 border-b border-white/10 bg-gradient-to-r from-brand-cyan/10 to-transparent transition-all duration-300 ${isCollapsed ? 'justify-center px-0' : 'px-6'}`}>
+            <div className="relative group flex-shrink-0">
+                <div className={`absolute -inset-1 bg-gradient-to-r from-brand-cyan to-brand-blue rounded-lg blur opacity-25 group-hover:opacity-75 transition duration-1000 group-hover:duration-200 ${isCollapsed ? 'opacity-0 group-hover:opacity-50' : ''}`}></div>
+                <div className="relative w-12 h-12 bg-black rounded-lg border border-brand-cyan/50 flex items-center justify-center overflow-hidden">
+                    <div className="absolute inset-0 opacity-50" style={{
+                        backgroundImage: `linear-gradient(45deg, #222 25%, transparent 25%, transparent 75%, #222 75%, #222), linear-gradient(45deg, #222 25%, transparent 25%, transparent 75%, #222 75%, #222)`,
+                        backgroundSize: '4px 4px',
+                        backgroundPosition: '0 0, 2px 2px'
+                    }}></div>
+                    <span className="font-display font-black text-brand-cyan text-xl italic tracking-tighter neon-text relative z-10">KC</span>
+                </div>
+            </div>
+            
+            <div className={`ml-4 overflow-hidden transition-all duration-300 ${isCollapsed ? 'w-0 opacity-0 ml-0' : 'w-auto opacity-100'}`}>
+                <h1 className="text-lg font-display font-bold text-white tracking-widest uppercase neon-text whitespace-nowrap">Genesis</h1>
+                <div className="flex items-center">
+                    <div className="w-2 h-2 bg-brand-cyan rounded-full animate-pulse mr-2"></div>
+                    <p className="text-[0.6rem] text-brand-cyan tracking-[0.3em] uppercase font-bold whitespace-nowrap">Telemetry</p>
+                </div>
+            </div>
+          </div>
+
+          {/* Navigation Items */}
+          <div className={`flex flex-col flex-1 overflow-y-auto py-6 space-y-2 custom-scrollbar overflow-x-hidden ${isCollapsed ? 'px-2' : 'px-4'}`}>
+            {navigation.map((item) => {
+              const isActive = pathname === item.href;
+              return (
+                <NavLink
+                  key={item.name}
+                  to={item.href}
+                  title={isCollapsed ? item.name : ''}
+                  className={`group relative flex items-center py-3 text-sm font-medium rounded-lg transition-all duration-300 border border-transparent overflow-hidden ${
+                    isCollapsed ? 'justify-center px-0' : 'px-4'
+                  } ${
+                    isActive
+                      ? 'bg-brand-cyan/10 border-brand-cyan/30 text-brand-cyan shadow-[0_0_15px_rgba(0,240,255,0.15)]'
+                      : 'text-gray-400 hover:bg-white/5 hover:text-white hover:border-white/10'
+                  }`}
+                >
+                  {/* Active Indicator Bar */}
+                  {isActive && (
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand-cyan shadow-[0_0_10px_#00F0FF]"></div>
+                  )}
+                  
+                  <item.icon
+                    className={`flex-shrink-0 h-5 w-5 transition-all duration-300 ${
+                      isActive ? 'text-brand-cyan drop-shadow-[0_0_8px_#00F0FF]' : 'text-gray-500 group-hover:text-gray-300'
+                    } ${isCollapsed ? '' : 'mr-3'}`}
+                    aria-hidden="true"
+                  />
+                  
+                  <span className={`font-display tracking-wide whitespace-nowrap transition-all duration-300 ${isCollapsed ? 'w-0 opacity-0 overflow-hidden' : 'w-auto opacity-100'} ${isActive ? 'font-bold' : ''}`}>
+                      {item.name}
+                  </span>
+                  
+                  {/* Hover Glint Effect */}
+                  <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/5 to-transparent skew-x-12 pointer-events-none"></div>
+                </NavLink>
+              );
+            })}
+          </div>
+          
+          {/* OBD Status Footer */}
+          <div className={`border-t border-white/10 bg-black/40 backdrop-blur-md transition-all duration-300 ${isCollapsed ? 'p-2' : 'p-4'}`}>
+            <button
+                onClick={handleConnectionClick}
+                className={`w-full flex items-center rounded-xl bg-white/5 border border-white/10 hover:border-brand-cyan/50 hover:bg-white/10 transition-all group relative overflow-hidden ${isCollapsed ? 'justify-center py-3 px-0' : 'justify-between px-4 py-3'}`}
+                title={isCollapsed ? getConnectionLabel() : ''}
+            >
+                <div className="flex items-center z-10">
+                    <div className={`w-2 h-2 rounded-full transition-all duration-500 ${isCollapsed ? 'mr-0' : 'mr-3'} ${
+                        obdState === ObdConnectionState.Connected ? 'bg-brand-green shadow-[0_0_8px_#33FF33]' : 
+                        obdState === ObdConnectionState.Disconnected ? 'bg-gray-600' : 
+                        'bg-yellow-400 animate-pulse'
+                    }`}></div>
+                    <span className={`text-xs font-display font-bold uppercase tracking-wider transition-colors whitespace-nowrap ${getConnectionColor()} ${isCollapsed ? 'w-0 opacity-0 overflow-hidden hidden' : 'w-auto opacity-100'}`}>
+                        {getConnectionLabel()}
+                    </span>
+                </div>
+                <div className={`z-10 ${isCollapsed ? 'hidden' : 'block'}`}>
+                   <svg className={`w-4 h-4 text-gray-500 group-hover:text-brand-cyan transition-colors ${obdState === ObdConnectionState.Connecting ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        {obdState === ObdConnectionState.Connected 
+                            ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                        }
+                    </svg>
+                </div>
+                {/* Button Scanline */}
+                <div className="absolute inset-0 bg-gradient-to-t from-brand-cyan/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            </button>
+          </div>
+       </div>
     </div>
   );
 };

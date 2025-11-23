@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { MaintenanceRecord } from '../types';
 import VerifiedIcon from '../components/icons/VerifiedIcon';
@@ -25,7 +26,7 @@ const MaintenanceLog: React.FC = () => {
       </div>
       
       <div className="bg-black rounded-lg border border-brand-cyan/30 shadow-lg overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto custom-scrollbar">
           <table className="min-w-full divide-y divide-base-700/50">
             <thead className="bg-base-800/50">
               <tr>

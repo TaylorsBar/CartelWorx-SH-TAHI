@@ -52,7 +52,7 @@ const Security: React.FC = () => {
             <h2 className="text-lg font-semibold text-gray-100 font-display">System Access Audit Trail</h2>
             <p className="text-sm text-gray-400">A transparent, immutable log of all significant actions within the system.</p>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto custom-scrollbar">
           <table className="min-w-full divide-y divide-base-700/50">
             <thead className="bg-base-800/50">
               <tr>

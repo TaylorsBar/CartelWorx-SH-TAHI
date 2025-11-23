@@ -22,12 +22,22 @@ export interface SensorDataPoint {
   // For GPS
   latitude: number;
   longitude: number;
+  // Source tracking
+  source?: 'sim' | 'live_obd';
 }
 
 export enum AlertLevel {
   Info = 'Info',
   Warning = 'Warning',
   Critical = 'Critical'
+}
+
+export enum ObdConnectionState {
+  Disconnected = 'Disconnected',
+  Connecting = 'Connecting',
+  Initializing = 'Initializing', // Sending AT commands
+  Connected = 'Connected',
+  Error = 'Error'
 }
 
 export interface DiagnosticAlert {

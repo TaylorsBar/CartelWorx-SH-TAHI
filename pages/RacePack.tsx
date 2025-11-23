@@ -69,7 +69,7 @@ const RacePack: React.FC = () => {
                  {/* Lap Times */}
                 <div className="lg:col-span-1 bg-black p-6 rounded-lg border border-brand-cyan/30 shadow-lg">
                      <h2 className="text-lg font-semibold border-b border-brand-cyan/30 pb-2 mb-4 font-display">Lap Times</h2>
-                     <div className="space-y-2 h-64 overflow-y-auto">
+                     <div className="space-y-2 h-64 overflow-y-auto custom-scrollbar">
                         {session.lapTimes.length > 0 ? (
                             session.lapTimes.map(lap => (
                                 <div key={lap.lap} className="flex justify-between items-center bg-base-800/50 p-2 rounded-md font-mono">

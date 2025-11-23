@@ -117,7 +117,7 @@ const Hedera: React.FC = () => {
                     <div className="p-4 border-b border-brand-cyan/30">
                         <h2 className="text-lg font-semibold text-gray-100 font-display">Recent Immutable Records</h2>
                     </div>
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto custom-scrollbar">
                         <table className="min-w-full divide-y divide-base-700/50">
                             <thead className="bg-base-800/50">
                                 <tr>

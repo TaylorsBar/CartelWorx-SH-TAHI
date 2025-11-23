@@ -1,3 +1,4 @@
+
 import React, { useContext } from 'react';
 import { AppearanceContext, Theme, AccentMaterial, LEDMode } from '../contexts/AppearanceContext';
 
@@ -5,8 +6,9 @@ const themes: { id: Theme; name: string; description: string }[] = [
     { id: 'rally', name: 'World Rally', description: 'High-contrast, functional display for intense conditions.' },
     { id: 'modern', name: 'Modern Performance', description: 'Sleek, futuristic interface with radial data readouts.' },
     { id: 'classic', name: 'E-Tuner Pro', description: 'Professional tuner interface with a red-on-black aesthetic.' },
-    { id: 'haltech', name: 'Pro Tuner', description: 'Yellow-on-black professional racing display.' },
+    { id: 'haltech', name: 'Haltech Pro', description: 'Emulates the popular Haltech digital dash.' },
     { id: 'minimalist', name: 'Minimalist EV', description: 'Clean, modern interface with a frosted glass aesthetic.' },
+    { id: 'pro-tuner', name: 'Pro Tuner', description: 'A sleek, professional racing display.' },
 ];
 
 const materials: { id: AccentMaterial; name: string; style: React.CSSProperties }[] = [
@@ -50,7 +52,7 @@ const Appearance: React.FC = () => {
 
             <div className="bg-black p-6 rounded-lg border border-brand-cyan/30 shadow-lg">
                 <h2 className="text-lg font-semibold border-b border-brand-cyan/30 pb-2 mb-6 font-display">Dashboard Theme</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {themes.map(t => (
                         <div
                             key={t.id}

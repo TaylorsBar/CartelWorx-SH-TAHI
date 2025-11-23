@@ -1,3 +1,17 @@
+
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "recharts": "https://aistudiocdn.com/recharts@^3.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.19.0",
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.1",
+    "react-markdown": "https://aistudiocdn.com/react-markdown@^10.1.0"
+  }
+}
+</script>
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -10,14 +24,14 @@
         theme: {
           extend: {
             colors: {
-              'brand-cyan': '#00FFFF',
-              'brand-blue': '#007FFF',
-              'brand-pink': '#FF00FF',
-              'brand-red': '#FF0000',
-              'brand-green': '#00FF00',
-              'base-900': '#0A0A0F',
-              'base-800': '#14141E',
-              'base-700': '#1E1E2D',
+              'brand-cyan': '#00F0FF',
+              'brand-blue': '#0099FF',
+              'brand-pink': '#FF00CC',
+              'brand-red': '#FF3333',
+              'brand-green': '#33FF33',
+              'base-900': '#050508',
+              'base-800': '#0f1014',
+              'base-700': '#1a1b21',
             },
             fontFamily: {
               'sans': ['Inter', 'sans-serif'],
@@ -25,10 +39,14 @@
               'display': ['Orbitron', 'sans-serif'],
             },
             boxShadow: {
-              'glow-cyan': '0 0 5px #00FFFF, 0 0 10px #00FFFF, 0 0 15px #007FFF',
-              'glow-blue': '0 0 5px #007FFF, 0 0 10px #007FFF',
-              'glow-red': '0 0 5px #FF0000, 0 0 10px #FF0000',
-              'glow-theme': '0 0 8px var(--theme-glow-color), 0 0 12px var(--theme-glow-color)',
+              'glow-cyan': '0 0 15px rgba(0, 240, 255, 0.3), 0 0 30px rgba(0, 240, 255, 0.1)',
+              'glow-blue': '0 0 15px rgba(0, 153, 255, 0.3), 0 0 30px rgba(0, 153, 255, 0.1)',
+              'glow-red': '0 0 15px rgba(255, 51, 51, 0.3), 0 0 30px rgba(255, 51, 51, 0.1)',
+              'glass-edge': 'inset 0 0 0 1px rgba(255,255,255,0.1), 0 10px 20px rgba(0,0,0,0.5)',
+              'glow-theme': '0 0 15px var(--theme-ambient-glow-color, transparent)',
+            },
+            backgroundImage: {
+              'glass-gradient': 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%)',
             }
           },
         },
@@ -36,195 +54,90 @@
     </script>
     <style>
       :root {
-        --theme-bg: #000;
-        --theme-text-primary: #FFF;
-        --theme-text-secondary: #AAA;
-        --theme-accent-primary: #00FFFF;
-        --theme-accent-secondary: #007FFF;
-        --theme-accent-red: #FF0000;
-        --theme-accent-green: #00FF00;
-        --theme-panel-bg: #0A0A0F;
-        --theme-panel-border: rgba(0, 255, 255, 0.3);
-        --theme-gauge-bezel: #222;
-        --theme-gauge-face: #000;
-        --theme-gauge-text: #FFF;
-        --theme-needle-color: #FF0000;
-        --theme-indicator-inactive: #4A5568;
-        --theme-bg-texture: none;
-        --theme-bg-size: auto;
-        
-        /* New centralized variables */
-        --theme-accent-color: var(--theme-accent-primary);
-        --theme-glow-color: var(--theme-accent-primary);
-        --theme-accent-material-bg: var(--theme-accent-primary);
-        --theme-ambient-glow-color: transparent;
-      }
-      
-      /* New Material Styles */
-      [data-material="cyan"] {
-        --theme-accent-color: #00FFFF;
-        --theme-glow-color: #00FFFF;
-        --theme-accent-material-bg: linear-gradient(145deg, #007FFF, #00FFFF);
-      }
-      [data-material="brushed-brass"] {
-        --theme-accent-color: #D4AF37;
-        --theme-glow-color: #D4AF37;
-        --theme-accent-material-bg: 
-            linear-gradient(to right, rgba(255,255,255,0.2), rgba(255,255,255,0), rgba(255,255,255,0.2)),
-            linear-gradient(145deg, #b08d57, #cfb53b);
-      }
-      [data-material="satin-brass"] {
-        --theme-accent-color: #e3d3a3;
-        --theme-glow-color: #e3d3a3;
-        --theme-accent-material-bg: radial-gradient(ellipse at center, #e3d3a3 0%, #c8b684 100%);
-      }
-      [data-material="antique-brass"] {
-        --theme-accent-color: #cd9575;
-        --theme-glow-color: #cd9575;
-        --theme-accent-material-bg: linear-gradient(145deg, #6b4f3a, #a57d54);
-      }
-      [data-material="carbon-fiber"] {
-        --theme-accent-color: #E0E0E0;
-        --theme-glow-color: #E0E0E0;
-        --theme-accent-material-bg:
+        /* High-Fidelity Carbon Fiber Simulation */
+        --carbon-fiber-weave: 
           linear-gradient(27deg, #151515 5px, transparent 5px) 0 5px,
           linear-gradient(207deg, #151515 5px, transparent 5px) 10px 0px,
           linear-gradient(27deg, #222 5px, transparent 5px) 0px 10px,
           linear-gradient(207deg, #222 5px, transparent 5px) 10px 5px,
-          linear-gradient(90deg, #1b1b1b 10px, transparent 10px),
+          linear-gradient(90deg, #1b1b1b 10px, transparent 10px);
+        
+        --carbon-base: 
           linear-gradient(#1d1d1d 25%, #1a1a1a 25%, #1a1a1a 50%, transparent 50%, transparent 75%, #242424 75%, #242424);
-        background-size: 20px 20px;
+
+        --cockpit-vignette: radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.95) 100%);
+
+        /* Glassmorphism variables */
+        --glass-bg: rgba(10, 12, 16, 0.65);
+        --glass-border: rgba(255, 255, 255, 0.08);
+        --glass-blur: 20px;
       }
       
-      /* Updated Theme Styles */
-      [data-theme="rally"] {
-        --theme-bg: #0A0A0F;
-        --theme-text-primary: #E2E8F0;
-        --theme-text-secondary: #A0AEC0;
-        --theme-accent-primary: var(--theme-accent-color);
-        --theme-accent-secondary: #FFFFFF;
-        --theme-accent-red: #E53E3E;
-        --theme-accent-green: #38A169;
-        --theme-panel-bg: transparent;
-        --theme-panel-border: rgba(0, 161, 255, 0.4);
-        --theme-gauge-bezel: var(--theme-accent-material-bg, #1A202C);
-        --theme-gauge-face: #0A0A0F;
-        --theme-gauge-text: #E2E8F0;
-        --theme-needle-color: var(--theme-accent-color);
-        --theme-indicator-inactive: #2D3748;
-        --theme-bg-texture: 
-          linear-gradient(rgba(10,10,15,0.95), rgba(10,10,15,0.95)),
-          url('https://www.transparenttextures.com/patterns/hexellence.png');
-        --theme-bg-size: auto, auto;
+      body {
+        background-color: #111;
+        /* Layered backgrounds: Vignette -> Weave -> Base Color */
+        background-image: var(--cockpit-vignette), var(--carbon-fiber-weave), var(--carbon-base);
+        background-size: 100% 100%, 20px 20px, 20px 20px;
+        background-attachment: fixed;
+        font-family: 'Inter', sans-serif;
+        color: #FFFFFF;
+        overflow: hidden; /* App handles scroll */
       }
 
-      [data-theme="modern"] {
-        --theme-bg: #0d1018;
-        --theme-text-primary: #e0e8f0;
-        --theme-text-secondary: #8295a8;
-        --theme-accent-primary: #00ffff;
-        --theme-accent-secondary: #8295a8;
-        --theme-accent-red: #ff4d4d;
-        --theme-panel-bg: rgba(10, 10, 15, 0.5);
-        --theme-panel-border: #4A5568;
-        --theme-glow-color: #00ffff;
-        --theme-bg-texture:
-            radial-gradient(ellipse at bottom, rgba(0, 50, 70, 0.4) 0%, transparent 60%),
-            linear-gradient(rgba(13,16,24,0.95), rgba(13,16,24,0.95)),
-            url('https://www.transparenttextures.com/patterns/hexellence.png');
-        --theme-bg-size: auto, auto, auto;
+      /* Premium Glass Panel Utility */
+      .glass-panel {
+        background: var(--glass-bg);
+        backdrop-filter: blur(var(--glass-blur));
+        -webkit-backdrop-filter: blur(var(--glass-blur));
+        border: 1px solid var(--glass-border);
+        border-top: 1px solid rgba(255, 255, 255, 0.15); /* Highlight top edge */
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
+        background-image: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%);
       }
 
-      [data-theme="classic"] {
-        --theme-bg: #1a1a1a;
-        --theme-text-primary: #FFFFFF;
-        --theme-text-secondary: #A0AEC0;
-        --theme-accent-primary: #ef4444; /* Red */
-        --theme-accent-secondary: #E2E8F0;
-        --theme-accent-red: #ef4444;
-        --theme-accent-green: #38A169;
-        --theme-panel-bg: linear-gradient(to bottom, #4c0519, #1a1a1a); /* Red to black gradient for headers */
-        --theme-panel-border: #ef4444;
-        --theme-gauge-bezel: #333333;
-        --theme-gauge-face: #000000;
-        --theme-gauge-text: #FFFFFF;
-        --theme-needle-color: #ef4444;
-        --theme-indicator-inactive: #333;
-        --theme-glow-color: #ef4444;
-        --theme-bg-texture: 
-          linear-gradient(rgba(10,10,15,0.95), rgba(10,10,15,0.95)),
-          url('https://www.transparenttextures.com/patterns/hexellence.png');
-        --theme-bg-size: auto, auto;
+      /* Neon Text Effect */
+      .neon-text {
+        text-shadow: 0 0 5px rgba(0, 240, 255, 0.5), 0 0 10px rgba(0, 240, 255, 0.3);
+      }
+      
+      .neon-text-green {
+        text-shadow: 0 0 5px rgba(51, 255, 51, 0.5), 0 0 10px rgba(51, 255, 51, 0.3);
       }
 
-      [data-theme="haltech"] {
-        --theme-bg: #0a0a0f;
-        --theme-text-primary: #FFFFFF;
-        --theme-text-secondary: #cccccc;
-        --theme-accent-primary: #ff3333;
-        --theme-haltech-red: #ff3333;
-        --theme-haltech-dark-gray: #111111;
-        --theme-haltech-light-gray: #333333;
-        --theme-haltech-silver: #a0a0a0;
-        --theme-needle-color: var(--theme-haltech-red);
-        --theme-bg-texture: 
-          linear-gradient(rgba(10,10,15,0.98), rgba(10,10,15,0.98)),
-          url('https://www.transparenttextures.com/patterns/hexellence.png');
-        --theme-bg-size: auto, auto;
+      .neon-text-red {
+        text-shadow: 0 0 5px rgba(255, 51, 51, 0.5), 0 0 10px rgba(255, 51, 51, 0.3);
       }
 
-      [data-theme="minimalist"] {
-        --theme-bg: #2d3038;
-        --theme-text-primary: #FFFFFF;
-        --theme-text-secondary: #b0b0b0;
-        --theme-accent-primary: #FF4500; /* Glowing Orange/Red */
-        --theme-glow-color: #FF4500;
-        --theme-panel-bg: rgba(90, 90, 90, 0.15);
-        --theme-panel-border: rgba(200, 200, 200, 0.2);
-        --theme-gauge-bezel: #252528;
-        --theme-gauge-face: rgba(230, 230, 230, 0.9);
-        --theme-gauge-text: #1a1a1a;
-        --theme-needle-color: var(--theme-accent-primary);
-        --theme-bg-texture: 
-          radial-gradient(ellipse at bottom, rgba(255, 69, 0, 0.1) 0%, transparent 50%),
-          repeating-linear-gradient(0deg, rgba(0,0,0,0.1), rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px);
-        --theme-bg-size: auto, auto;
+      /* Next-Gen Custom Scrollbar */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 3px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(0, 240, 255, 0.15);
+        border-radius: 3px;
+        border: 1px solid rgba(0, 240, 255, 0.1);
+        box-shadow: 0 0 6px rgba(0, 240, 255, 0.1);
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: rgba(0, 240, 255, 0.4);
+        box-shadow: 0 0 10px rgba(0, 240, 255, 0.4);
+      }
+      .custom-scrollbar::-webkit-scrollbar-corner {
+        background: transparent;
       }
 
-      .theme-background {
-        background-color: var(--theme-bg);
-        background-image: var(--theme-bg-texture);
-        background-size: var(--theme-bg-size);
-        box-shadow: inset 0 0 80px 20px var(--theme-ambient-glow-color, transparent);
-        transition: box-shadow 0.5s ease-in-out;
-      }
-
-      @keyframes subtle-pulse {
-        0%, 100% { opacity: 1; filter: drop-shadow(0 0 2px var(--theme-glow-color, #00FFFF)); }
-        50% { opacity: 0.9; filter: drop-shadow(0 0 5px var(--theme-glow-color, #00FFFF)); }
-      }
-      .ar-wireframe-animated {
-        animation: subtle-pulse 5s ease-in-out infinite;
-      }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;700&family=Orbitron:wght@400;500;700;900&display=swap" rel="stylesheet">
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.1.1/",
-    "react": "https://esm.sh/react@^19.1.1",
-    "react-router-dom": "https://esm.sh/react-router-dom@^7.7.1",
-    "recharts": "https://esm.sh/recharts@^3.1.0",
-    "@google/genai": "https://esm.sh/@google/genai@^1.12.0",
-    "react-markdown": "https://esm.sh/react-markdown@^10.1.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.1.1/"
-  }
-}
-</script>
-</head>
-  <body class="bg-black text-gray-200 font-sans">
-    <div id="root"></div>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@400;500;700;900&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="root" class="h-screen w-screen"></div>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>
