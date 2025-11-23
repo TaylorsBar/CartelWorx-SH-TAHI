@@ -137,7 +137,7 @@ const Sidebar: React.FC = () => {
                     aria-hidden="true"
                   />
                   
-                  <span className={`font-display tracking-wide whitespace-nowrap transition-all duration-300 ${isCollapsed ? 'w-0 opacity-0 overflow-hidden' : 'w-auto opacity-100'} ${isActive ? 'font-bold' : ''}`}>
+                  <span className={`font-display tracking-wide whitespace-nowrap transition-all duration-300 ${isCollapsed ? 'w-0 opacity-0 overflow-hidden hidden' : 'w-auto opacity-100'} ${isActive ? 'font-bold' : ''}`}>
                       {item.name}
                   </span>
                   
