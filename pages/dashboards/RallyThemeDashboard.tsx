@@ -1,92 +1,100 @@
+
 import React from 'react';
 import { useVehicleData } from '../../hooks/useVehicleData';
 import { SensorDataPoint } from '../../types';
-import HorizontalTachometer from '../../components/tachometers/HorizontalTachometer';
-import IndicatorPanel from '../../components/IndicatorPanel';
-import { useAnimatedValue } from '../../hooks/useAnimatedValue';
 
-const DataReadout: React.FC<{ label: string; value: number; unit: string; className?: string, format: (val: number) => string }> = ({ label, value, unit, className = '', format }) => {
-    const animatedValue = useAnimatedValue(value);
-    return (
-        <div className={`flex flex-col items-center justify-between p-2 rounded-lg ${className}`}>
-            <div className="text-lg font-mono text-[var(--theme-text-secondary)]">{label}</div>
-            <div>
-                <span className="text-4xl font-display font-bold text-[var(--theme-text-primary)]">{format(animatedValue)}</span>
-                <span className="ml-2 text-lg text-[var(--theme-text-secondary)]">{unit}</span>
+const RallyDataBlock: React.FC<{ label: string; value: string | number; unit?: string; alert?: boolean }> = ({ label, value, unit, alert }) => (
+    <div className={`relative p-2 border-2 ${alert ? 'bg-red-600 border-red-600 text-white animate-pulse' : 'bg-[#1a1a1a] border-yellow-500 text-yellow-500'} skew-x-[-12deg] shadow-lg`}>
+        <div className="skew-x-[12deg]">
+            <div className={`text-[10px] font-mono font-bold uppercase tracking-widest ${alert ? 'text-white' : 'text-gray-400'}`}>{label}</div>
+            <div className="flex items-baseline gap-1">
+                <span className="text-3xl font-black font-mono tracking-tighter">{value}</span>
+                {unit && <span className="text-xs font-bold">{unit}</span>}
             </div>
         </div>
-    );
-};
+    </div>
+);
 
-const GaugeBar: React.FC<{ label: string, value: number, max: number, unit: string, format: (val: number) => string }> = ({ label, value, max, unit, format }) => {
-    const animatedValue = useAnimatedValue(value);
-    const percentage = max > 0 ? (animatedValue / max) * 100 : 0;
-    const numSegments = 20;
-
+const LinearRpmBar: React.FC<{ rpm: number; max: number }> = ({ rpm, max }) => {
+    const pct = Math.min(100, Math.max(0, (rpm / max) * 100));
+    const isRedline = pct > 85;
+    
     return (
-        <div className="w-full">
-            <div className="flex justify-between items-baseline text-sm mb-1">
-                <span className="font-semibold text-[var(--theme-text-secondary)]">{label}</span>
-                <span className="font-mono text-[var(--theme-text-primary)]">{format(animatedValue)} {unit}</span>
-            </div>
-            <div className="w-full flex gap-1 h-3 bg-black/30 p-0.5 rounded-sm border border-gray-700/50">
-                {Array.from({ length: numSegments }).map((_, i) => (
+        <div className="w-full h-16 bg-[#111] border-b-4 border-yellow-500 relative overflow-hidden flex items-end px-1 gap-1">
+            {Array.from({length: 40}).map((_, i) => {
+                const barPct = (i / 40) * 100;
+                const active = pct >= barPct;
+                let color = 'bg-yellow-500';
+                if (barPct > 85) color = 'bg-red-600';
+                if (active && barPct > 85) color = 'bg-red-500 animate-pulse';
+
+                return (
                     <div 
-                        key={i}
-                        className="flex-1 h-full rounded-sm transition-colors duration-100"
-                        style={{ backgroundColor: i < (percentage / 100 * numSegments) ? 'var(--theme-accent-primary)' : 'var(--theme-indicator-inactive)' }}
-                    ></div>
-                ))}
+                        key={i} 
+                        className={`flex-1 transition-all duration-75 ${active ? color : 'bg-[#222]'} ${active ? 'h-full' : 'h-1/2'}`}
+                        style={{ opacity: active ? 1 : 0.3 }}
+                    />
+                )
+            })}
+            <div className="absolute top-1 right-2 text-4xl font-black text-white font-mono z-10 drop-shadow-md">
+                {rpm.toFixed(0)} <span className="text-sm text-yellow-500">RPM</span>
             </div>
         </div>
     );
 };
-
 
 const RallyThemeDashboard: React.FC = () => {
     const { latestData } = useVehicleData();
     const d: SensorDataPoint = latestData;
 
-    const animatedSpeed = useAnimatedValue(d.speed);
-    const animatedGear = d.gear; // Gear changes are instant
-
     return (
-        <div className="flex flex-col items-center justify-between h-full w-full bg-[var(--theme-bg)] text-white p-4 font-sans gap-4 theme-background">
-            {/* Top Section: RPM */}
-            <HorizontalTachometer rpm={d.rpm} />
-            
-            {/* Middle Section: Main Readouts */}
-            <div className="w-full flex justify-around items-center flex-grow">
-                 <DataReadout label="BOOST" value={d.turboBoost} unit="bar" className="w-1/4" format={v => v.toFixed(2)} />
-                 
-                 <div className="flex flex-col items-center justify-center w-1/2 h-full bg-black/20 border-2 border-gray-800 rounded-lg p-4">
-                    <div className="flex items-end justify-center w-full">
-                        <div className="font-display text-9xl font-bold text-white tracking-widest leading-none">{animatedGear}</div>
-                        <div className="text-2xl text-[var(--theme-text-secondary)] mb-2 ml-4">GEAR</div>
-                    </div>
-                    <div className="w-full h-px bg-gray-700 my-3"></div>
-                    <div className="flex items-baseline mt-2">
-                        <span className="font-mono text-5xl font-bold">{animatedSpeed.toFixed(0)}</span>
-                        <span className="ml-2 text-xl text-[var(--theme-text-secondary)]">km/h</span>
-                    </div>
-                 </div>
+        <div className="flex flex-col h-full w-full bg-[#050505] text-white overflow-hidden relative font-mono">
+            {/* Dirt Texture Overlay */}
+            <div className="absolute inset-0 opacity-10 pointer-events-none" style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='1'/%3E%3C/svg%3E")`,
+            }}></div>
 
-                 <DataReadout label="LAMBDA" value={d.o2SensorVoltage * 2} unit="λ" className="w-1/4" format={v => v.toFixed(2)} />
+            {/* Top RPM Bar */}
+            <div className="w-full z-10">
+                <LinearRpmBar rpm={d.rpm} max={8000} />
             </div>
 
-            {/* Bottom Section: Gauges */}
-            <div className="w-full flex justify-between gap-8">
-                <div className="w-1/3 space-y-3">
-                    <GaugeBar label="Air Temp" value={d.inletAirTemp} max={100} unit="°C" format={v => v.toFixed(0)} />
-                    <GaugeBar label="ECT" value={d.engineTemp} max={120} unit="°C" format={v => v.toFixed(0)} />
+            {/* Main Content */}
+            <div className="flex-1 p-4 grid grid-cols-3 gap-6 z-10">
+                
+                {/* Left Telemetry */}
+                <div className="flex flex-col justify-center gap-6">
+                    <RallyDataBlock label="Turbo Boost" value={d.turboBoost.toFixed(2)} unit="BAR" />
+                    <RallyDataBlock label="Oil Pressure" value={d.oilPressure.toFixed(1)} unit="PSI" alert={d.oilPressure < 1.0} />
+                    <RallyDataBlock label="Fuel Level" value="42" unit="L" />
                 </div>
-                <div className="w-1/3 flex flex-col items-center justify-center">
-                    <IndicatorPanel />
+
+                {/* Center Gear & Speed */}
+                <div className="flex flex-col items-center justify-center relative">
+                    <div className="w-64 h-64 bg-yellow-500 rounded-full flex items-center justify-center border-8 border-[#111] shadow-[0_0_50px_rgba(234,179,8,0.4)]">
+                        <span className="text-[10rem] font-black text-[#111] leading-none mt-[-1rem]">{d.gear}</span>
+                    </div>
+                    <div className="mt-6 bg-[#111] border-2 border-yellow-500 px-8 py-2 transform skew-x-[-12deg] shadow-lg">
+                        <span className="text-6xl font-black text-white block transform skew-x-[12deg]">{d.speed.toFixed(0)} <span className="text-xl text-gray-400">KM/H</span></span>
+                    </div>
                 </div>
-                <div className="w-1/3 space-y-3">
-                    <GaugeBar label="Oil Pres" value={d.oilPressure} max={8} unit="Bar" format={v => v.toFixed(1)} />
-                    <GaugeBar label="Fuel Pres" value={d.fuelPressure} max={10} unit="Bar" format={v => v.toFixed(1)} />
+
+                {/* Right Telemetry */}
+                <div className="flex flex-col justify-center gap-6">
+                    <RallyDataBlock label="Coolant Temp" value={d.engineTemp.toFixed(0)} unit="°C" alert={d.engineTemp > 105} />
+                    <RallyDataBlock label="Intake Temp" value={d.inletAirTemp.toFixed(0)} unit="°C" />
+                    <RallyDataBlock label="Battery" value={d.batteryVoltage.toFixed(1)} unit="V" />
                 </div>
+            </div>
+
+            {/* Bottom Status Strip */}
+            <div className="h-12 bg-[#111] border-t-4 border-yellow-500 flex items-center justify-between px-6 z-10">
+                 <div className="text-xs font-bold text-gray-400 uppercase">Stage Mode: <span className="text-yellow-500">ACTIVE</span></div>
+                 <div className="flex gap-4">
+                     <span className={`px-2 py-0.5 text-xs font-bold ${d.engineTemp > 100 ? 'bg-red-600 text-white animate-pulse' : 'bg-green-600 text-black'}`}>ENG</span>
+                     <span className="px-2 py-0.5 bg-green-600 text-black text-xs font-bold">ABS</span>
+                     <span className="px-2 py-0.5 bg-yellow-500 text-black text-xs font-bold">TC</span>
+                 </div>
             </div>
         </div>
     );

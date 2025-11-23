@@ -1,12 +1,10 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
-import { MaintenanceRecord, SensorDataPoint, TuningSuggestion, VoiceCommandIntent, DiagnosticAlert } from '../types';
+import { GoogleGenAI, Type, Modality } from "@google/genai";
+import { MaintenanceRecord, SensorDataPoint, TuningSuggestion, VoiceCommandIntent, DiagnosticAlert, CoPilotAction } from '../types';
 
 const API_KEY = process.env.API_KEY;
 
 if (!API_KEY) {
-  // In a real app, you'd want to handle this more gracefully.
-  // For this project, we assume the key is present in the environment.
   console.error("API_KEY environment variable not set.");
 }
 
@@ -85,18 +83,14 @@ export const getPredictiveAnalysis = async (
       contents: prompt,
       config: {
         tools: [{googleSearch: {}}],
-        // responseMimeType is not allowed when using the googleSearch tool, this was an error.
-        // It has been corrected by removing it.
       },
     });
 
-    // The Gemini API can sometimes wrap the JSON in markdown backticks.
     const cleanedText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(cleanedText);
 
   } catch (error) {
     console.error("Error fetching predictive analysis from Gemini:", error);
-    // Return a structured error so the UI can handle it gracefully
     return { 
       error: "Failed to get predictive analysis.",
       details: error instanceof Error ? error.message : String(error)
@@ -235,13 +229,6 @@ export const getVoiceCommandIntent = async (command: string): Promise<VoiceComma
     2. If the intent is \`SHOW_COMPONENT\`, identify the requested \`component\` and map it to one of the available component IDs. The component should be null for other intents.
     3. Provide a \`confidence\` score for your interpretation.
 
-    **Examples**:
-    - "Show me the oxygen sensor" -> { "intent": "SHOW_COMPONENT", "component": "o2-sensor", "confidence": 0.95 }
-    - "What is my next required service?" -> { "intent": "QUERY_SERVICE", "confidence": 0.98 }
-    - "Highlight the turbo" -> { "intent": "SHOW_COMPONENT", "component": "turbo", "confidence": 0.9 }
-    - "Clear the screen" -> { "intent": "HIDE_COMPONENT", "confidence": 0.92 }
-    - "What's the weather like?" -> { "intent": "UNKNOWN", "confidence": 1.0 }
-
     Output your response as a single, valid JSON object following the provided schema.
   `;
 
@@ -293,53 +280,117 @@ export const generateComponentImage = async (componentName: string): Promise<str
   }
 };
 
-const COPILOT_INSTRUCTION = `You are 'KC', a hands-free, voice-activated AI Co-Pilot for a high-performance vehicle. Your purpose is to assist the driver with real-time information and diagnostics. Be conversational, concise, and direct. Your responses will be read aloud, so avoid long paragraphs, complex markdown, or lists. Focus on providing immediate, actionable information. The user is likely driving.`;
+const copilotSchema = {
+    type: Type.OBJECT,
+    properties: {
+        action: {
+            type: Type.STRING,
+            description: "The action to perform. 'NAVIGATE' to change screens, 'SPEAK' to answer questions without navigation, 'ANALYZE' to trigger deep diagnostics.",
+        },
+        payload: {
+            type: Type.STRING,
+            description: "If action is NAVIGATE, the route path (e.g. '/tuning'). If no specific route, or for other actions, null or empty string.",
+        },
+        textToSpeak: {
+            type: Type.STRING,
+            description: "The spoken response to the user. Keep it brief and conversational.",
+        },
+    },
+    required: ["action", "textToSpeak"],
+};
 
-export const getCoPilotResponse = async (
-  command: string,
-  vehicleData: SensorDataPoint,
-  activeAlerts: DiagnosticAlert[]
-): Promise<string> => {
-  const prompt = `
-    The driver just gave you a voice command. Use the provided real-time context to give the best possible response.
+export const interpretHandsFreeCommand = async (
+    command: string,
+    currentRoute: string,
+    vehicleData: SensorDataPoint,
+    alerts: DiagnosticAlert[]
+): Promise<CoPilotAction> => {
+    
+    const prompt = `
+        You are KC, the advanced AI Co-Pilot for the Genesis Telemetry System. Your user is driving or tuning a high-performance car and giving you voice commands. You must interpret their intent and control the app interface or provide information.
 
-    **Driver's Command**: "${command}"
+        **Current Context**:
+        - Screen: ${currentRoute}
+        - Vehicle Stats: RPM ${vehicleData.rpm.toFixed(0)}, Boost ${vehicleData.turboBoost.toFixed(1)}bar, Temp ${vehicleData.engineTemp.toFixed(0)}°C.
+        - Active Alerts: ${alerts.length > 0 ? alerts.map(a => a.message).join(', ') : 'None'}.
 
-    **Real-Time Vehicle Data**:
-    - RPM: ${vehicleData.rpm.toFixed(0)}
-    - Speed: ${vehicleData.speed.toFixed(0)} km/h
-    - Gear: ${vehicleData.gear}
-    - Engine Temp: ${vehicleData.engineTemp.toFixed(1)}°C
-    - Turbo Boost: ${vehicleData.turboBoost.toFixed(2)} bar
-    - Oil Pressure: ${vehicleData.oilPressure.toFixed(1)} bar
+        **User Command**: "${command}"
 
-    **Active Diagnostic Alerts**:
-    ${activeAlerts.length > 0 ? JSON.stringify(activeAlerts, null, 2) : "None. All systems are normal."}
+        **Available Routes**:
+        - Dashboard: '/'
+        - Diagnostics: '/diagnostics'
+        - Tuning/Dyno: '/tuning'
+        - AI Engine/Predictive: '/ai-engine'
+        - AR Assistant: '/ar-assistant'
+        - Race Pack/Timing: '/race-pack'
+        - Logbook: '/logbook'
+        - Settings: '/appearance'
 
-    **Your Task**:
-    1.  **Acknowledge Alerts**: If the command is general (e.g., "What's my status?", "Is everything okay?") and there are active alerts, prioritize explaining the most critical alert in simple terms.
-    2.  **Answer Directly**: If the command is a specific question (e.g., "What's my oil pressure?"), answer it using the real-time data.
-    3.  **Be Proactive**: If you notice something in the data that's relevant to the command, mention it. For example, if asked for engine temp and it's high, say so.
-    4.  **Keep it Brief**: Remember, your response will be spoken aloud. Aim for one or two short sentences.
+        **Reasoning**:
+        Use your advanced reasoning capabilities to determine the best course of action.
+        - If the user wants to see a specific screen (e.g., "Show me the dyno", "Go to settings"), set action to 'NAVIGATE' and payload to the route.
+        - If the user asks a question about the current data (e.g., "How's my oil pressure?", "Is the engine hot?"), set action to 'SPEAK' and provide the answer based on the context.
+        - If the user mentions a problem or asks to check for issues, set action to 'NAVIGATE' to '/ai-engine' or 'SPEAK' about the alerts.
+        
+        **Thinking Process**:
+        1. Analyze the user's intent. Is it navigational or informational?
+        2. Check if the command requires switching screens.
+        3. Formulate a concise, helpful spoken response.
 
-    **Example Responses**:
-    - *User Command: "Hey KC, what's my status?" with a MAP sensor alert active.* -> "I've detected a critical fault with the MAP sensor. Readings are erratic, which could cause a stall. I recommend pulling over to inspect it."
-    - *User Command: "What's my current boost?"* -> "You're currently at ${vehicleData.turboBoost.toFixed(2)} bar of boost."
-    - *User Command: "Is everything okay?" with no alerts.* -> "Yes, all systems are nominal. Everything looks good."
-    - *User Command: "Tell me about my engine."* -> "Your engine is running at ${vehicleData.rpm.toFixed(0)} RPM, with a coolant temperature of ${vehicleData.engineTemp.toFixed(1)} degrees Celsius. Oil pressure is stable."
-  `;
+        **Output**:
+        Return a single JSON object.
+    `;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        systemInstruction: COPILOT_INSTRUCTION,
-      }
-    });
-    return response.text;
-  } catch (error) {
-    console.error("Error fetching Co-Pilot response from Gemini:", error);
-    return "I'm sorry, I'm having trouble communicating right now. Please try again in a moment.";
-  }
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-3-pro-preview",
+            contents: prompt,
+            config: {
+                thinkingConfig: { thinkingBudget: 1024 }, // Thinking budget for reasoning
+                responseMimeType: "application/json",
+                responseSchema: copilotSchema
+            }
+        });
+
+        const cleanedText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(cleanedText) as CoPilotAction;
+    } catch (error) {
+        console.error("Error interpreting hands-free command:", error);
+        return {
+            action: 'SPEAK',
+            textToSpeak: "I'm having trouble processing that command. Please try again."
+        };
+    }
+};
+
+export const generateGeminiSpeech = async (text: string): Promise<ArrayBuffer | null> => {
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash-preview-tts",
+            contents: [{ parts: [{ text: text }] }],
+            config: {
+                responseModalities: [Modality.AUDIO],
+                speechConfig: {
+                    voiceConfig: {
+                        prebuiltVoiceConfig: { voiceName: 'Kore' },
+                    },
+                },
+            },
+        });
+
+        const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (!base64Audio) return null;
+
+        // Decode base64 to ArrayBuffer
+        const binaryString = atob(base64Audio);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes.buffer;
+    } catch (error) {
+        console.error("Error generating speech:", error);
+        return null;
+    }
 };

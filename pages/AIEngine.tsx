@@ -49,63 +49,80 @@ const AIEngine: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-bold text-gray-100 font-display">Predictive AI Engine</h1>
-                <p className="text-gray-400 mt-1">Leveraging real-time data to forecast vehicle health.</p>
+            <div className="border-b border-white/10 pb-4">
+                <h1 className="text-2xl font-bold text-white font-display uppercase tracking-widest">Predictive Command</h1>
+                <p className="text-gray-500 text-sm mt-1">Gemini-Powered Vehicle Health Forecasting</p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Connection & Control Panel */}
-                <div className="lg:col-span-1 bg-black p-6 rounded-lg border border-brand-cyan/30 shadow-lg space-y-4">
-                    <h2 className="text-lg font-semibold border-b border-brand-cyan/30 pb-2 font-display">Data Sources</h2>
+                <div className="lg:col-span-1 bg-[#0a0a0a] p-6 rounded-lg border border-white/10 shadow-xl space-y-6 relative overflow-hidden group">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-brand-cyan to-transparent"></div>
                     
-                    {/* OBD-II Connection */}
-                    <div className="flex items-center justify-between p-3 bg-base-800/50 rounded-md">
-                        <div className="flex items-center">
-                             <svg className="w-6 h-6 mr-3 text-brand-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                             <span className="font-semibold">Live OBD-II Data</span>
-                        </div>
-                        <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}></div>
-                    </div>
+                    <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Input Streams</h2>
                     
-                    {/* Maintenance Log */}
-                     <div className="flex items-center justify-between p-3 bg-base-800/50 rounded-md">
-                        <div className="flex items-center">
-                             <svg className="w-6 h-6 mr-3 text-brand-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
-                             <span className="font-semibold">Maintenance Log</span>
+                    <div className="space-y-3">
+                        {/* OBD-II Connection */}
+                        <div className="flex items-center justify-between p-4 bg-[#111] border border-white/5 rounded transition-all hover:border-brand-cyan/30">
+                            <div className="flex items-center">
+                                <span className="font-semibold text-gray-200 text-sm">OBD-II Telemetry</span>
+                            </div>
+                            <div className={`flex items-center gap-2 text-xs font-bold ${isConnected ? 'text-green-500' : 'text-gray-600'}`}>
+                                {isConnected ? 'LIVE' : 'OFFLINE'}
+                                <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-gray-600'}`}></div>
+                            </div>
                         </div>
-                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                    </div>
+                        
+                        {/* Maintenance Log */}
+                         <div className="flex items-center justify-between p-4 bg-[#111] border border-white/5 rounded">
+                            <div className="flex items-center">
+                                 <span className="font-semibold text-gray-200 text-sm">Service History</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs font-bold text-green-500">
+                                SYNCED
+                                <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                            </div>
+                        </div>
 
-                    {/* Driver Profile */}
-                    <div className="flex items-center justify-between p-3 bg-base-800/50 rounded-md">
-                        <div className="flex items-center">
-                            <svg className="w-6 h-6 mr-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                            <span className="text-gray-500">Driver Profile</span>
+                        {/* Driver Profile */}
+                        <div className="flex items-center justify-between p-4 bg-[#111] border border-white/5 rounded">
+                            <div className="flex items-center">
+                                <span className="font-semibold text-gray-200 text-sm">Driver Profile</span>
+                            </div>
+                             <div className="flex items-center gap-2 text-xs font-bold text-gray-500">
+                                STATIC
+                                <div className="w-2 h-2 rounded-full bg-gray-600"></div>
+                            </div>
                         </div>
-                         <div className="w-3 h-3 rounded-full bg-gray-500"></div>
                     </div>
                     
-                    {!isConnected ? (
-                        <button onClick={handleConnect} disabled={isConnecting} className="w-full bg-brand-blue text-white font-semibold py-3 rounded-md hover:bg-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-brand-blue shadow-glow-blue disabled:bg-base-700 disabled:cursor-not-allowed">
-                            {isConnecting ? 'Connecting...' : 'Connect to Vehicle'}
-                        </button>
-                    ) : (
-                         <button onClick={handleAnalyze} disabled={isAnalyzing} className="w-full bg-brand-cyan text-black font-semibold py-3 rounded-md hover:bg-cyan-300 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-brand-cyan shadow-glow-cyan disabled:bg-base-700 disabled:cursor-not-allowed">
-                            {isAnalyzing ? 'Analyzing...' : 'Run Predictive Analysis'}
-                        </button>
-                    )}
+                    <div className="pt-4">
+                        {!isConnected ? (
+                            <button onClick={handleConnect} disabled={isConnecting} className="w-full bg-white/10 text-white border border-white/20 font-bold py-3 rounded hover:bg-white/20 transition-all focus:outline-none uppercase tracking-widest text-sm backdrop-blur-sm">
+                                {isConnecting ? 'Establishing Uplink...' : 'Initialize System'}
+                            </button>
+                        ) : (
+                             <button onClick={handleAnalyze} disabled={isAnalyzing} className="w-full bg-brand-cyan text-black font-bold py-3 rounded hover:bg-cyan-300 transition-all focus:outline-none shadow-[0_0_20px_rgba(0,240,255,0.3)] uppercase tracking-widest text-sm">
+                                {isAnalyzing ? 'Processing...' : 'Run Prediction Model'}
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Risk Timeline */}
-                <div className="lg:col-span-2 bg-black p-6 rounded-lg border border-brand-cyan/30 shadow-lg min-h-[300px]">
-                    <h2 className="text-lg font-semibold border-b border-brand-cyan/30 pb-2 mb-6 font-display">Risk Timeline</h2>
+                <div className="lg:col-span-2 bg-[#0a0a0a] p-6 rounded-lg border border-white/10 shadow-xl min-h-[400px] relative">
+                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-transparent"></div>
+                    <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-6">Strategic Analysis</h2>
+                    
                     {isAnalyzing && (
-                        <div className="flex justify-center items-center h-48">
-                            <div className="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4 animate-spin border-t-brand-cyan"></div>
+                        <div className="flex flex-col justify-center items-center h-64">
+                            <div className="w-16 h-16 border-4 border-brand-cyan border-t-transparent rounded-full animate-spin"></div>
+                            <p className="mt-4 text-brand-cyan font-mono text-sm animate-pulse">Running Inference Engine...</p>
                         </div>
                     )}
-                    {error && <div className="text-red-500 text-center p-4 bg-red-900/20 rounded-md">{error}</div>}
+                    
+                    {error && <div className="text-red-400 border border-red-500/30 bg-red-500/10 p-4 rounded text-center text-sm font-bold">{error}</div>}
+                    
                     {!isAnalyzing && !error && (
                         <RiskTimeline events={timelineEvents} />
                     )}

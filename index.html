@@ -8,12 +8,13 @@
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.19.0",
     "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.1",
-    "react-markdown": "https://aistudiocdn.com/react-markdown@^10.1.0"
+    "react-markdown": "https://aistudiocdn.com/react-markdown@^10.1.0",
+    "zustand": "https://aistudiocdn.com/zustand@^4.5.0"
   }
 }
 </script>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-palette="cyan" data-material="glass">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -25,8 +26,8 @@
         theme: {
           extend: {
             colors: {
-              'brand-cyan': '#00F0FF',
-              'brand-blue': '#0099FF',
+              'brand-cyan': 'var(--brand-primary)',
+              'brand-blue': 'var(--brand-secondary)',
               'brand-pink': '#FF00CC',
               'brand-red': '#FF3333',
               'brand-green': '#33FF33',
@@ -40,7 +41,7 @@
               'display': ['Orbitron', 'sans-serif'],
             },
             boxShadow: {
-              'glow-cyan': '0 0 15px rgba(0, 240, 255, 0.3), 0 0 30px rgba(0, 240, 255, 0.1)',
+              'glow-cyan': '0 0 15px var(--brand-glow), 0 0 30px var(--brand-glow-dim)',
               'glow-blue': '0 0 15px rgba(0, 153, 255, 0.3), 0 0 30px rgba(0, 153, 255, 0.1)',
               'glow-red': '0 0 15px rgba(255, 51, 51, 0.3), 0 0 30px rgba(255, 51, 51, 0.1)',
               'glass-edge': 'inset 0 0 0 1px rgba(255,255,255,0.1), 0 10px 20px rgba(0,0,0,0.5)',
@@ -68,10 +69,66 @@
 
         --cockpit-vignette: radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.95) 100%);
 
-        /* Glassmorphism variables */
+        /* Default Palette (Cyan) */
+        --brand-primary: #00F0FF;
+        --brand-secondary: #0099FF;
+        --brand-glow: rgba(0, 240, 255, 0.5);
+        --brand-glow-dim: rgba(0, 240, 255, 0.2);
+
+        /* Default Material (Glass) */
         --glass-bg: rgba(10, 12, 16, 0.65);
         --glass-border: rgba(255, 255, 255, 0.08);
         --glass-blur: 20px;
+        --glass-texture: none;
+      }
+
+      /* Color Palettes */
+      [data-palette="red"] {
+        --brand-primary: #FF3333;
+        --brand-secondary: #CC0000;
+        --brand-glow: rgba(255, 51, 51, 0.5);
+        --brand-glow-dim: rgba(255, 51, 51, 0.2);
+      }
+      [data-palette="green"] {
+        --brand-primary: #33FF33;
+        --brand-secondary: #00CC00;
+        --brand-glow: rgba(51, 255, 51, 0.5);
+        --brand-glow-dim: rgba(51, 255, 51, 0.2);
+      }
+      [data-palette="purple"] {
+        --brand-primary: #CC00FF;
+        --brand-secondary: #9900CC;
+        --brand-glow: rgba(204, 0, 255, 0.5);
+        --brand-glow-dim: rgba(204, 0, 255, 0.2);
+      }
+      [data-palette="amber"] {
+        --brand-primary: #FFCC00;
+        --brand-secondary: #FF9900;
+        --brand-glow: rgba(255, 204, 0, 0.5);
+        --brand-glow-dim: rgba(255, 204, 0, 0.2);
+      }
+
+      /* Materials */
+      [data-material="matte"] {
+        --glass-bg: rgba(15, 15, 17, 0.95);
+        --glass-border: rgba(60, 60, 60, 0.8);
+        --glass-blur: 0px;
+      }
+      [data-material="brushed-metal"] {
+        --glass-bg: rgba(30, 32, 38, 0.85);
+        --glass-border: rgba(255, 255, 255, 0.15);
+        --glass-blur: 10px;
+        --glass-texture: repeating-linear-gradient(90deg, transparent, transparent 1px, rgba(255,255,255,0.02) 1px, rgba(255,255,255,0.02) 2px);
+      }
+      [data-material="carbon"] {
+        --glass-bg: rgba(5, 5, 5, 0.85);
+        --glass-border: rgba(255, 255, 255, 0.1);
+        --glass-blur: 5px;
+        --glass-texture: 
+          linear-gradient(27deg, #151515 2px, transparent 2px) 0 2px,
+          linear-gradient(207deg, #151515 2px, transparent 2px) 4px 0px,
+          linear-gradient(27deg, #222 2px, transparent 2px) 0px 4px,
+          linear-gradient(207deg, #222 2px, transparent 2px) 4px 2px;
       }
       
       body {
@@ -93,12 +150,27 @@
         border: 1px solid var(--glass-border);
         border-top: 1px solid rgba(255, 255, 255, 0.15); /* Highlight top edge */
         box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
-        background-image: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%);
+      }
+      
+      /* Only apply texture overlay if defined and not none */
+      .glass-panel::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image: var(--glass-texture);
+        background-size: 8px 8px; /* For carbon material */
+        opacity: 0.3;
+        pointer-events: none;
+        z-index: -1;
+      }
+      
+      [data-material="brushed-metal"] .glass-panel::before {
+         background-size: 100% 100%; /* Brushed metal needs full cover */
       }
 
       /* Neon Text Effect */
       .neon-text {
-        text-shadow: 0 0 5px rgba(0, 240, 255, 0.5), 0 0 10px rgba(0, 240, 255, 0.3);
+        text-shadow: 0 0 5px var(--brand-glow), 0 0 10px var(--brand-glow-dim);
       }
       
       .neon-text-green {
@@ -119,14 +191,14 @@
         border-radius: 3px;
       }
       .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: rgba(0, 240, 255, 0.15);
+        background: rgba(255, 255, 255, 0.15); /* Neutral for compatibility */
         border-radius: 3px;
-        border: 1px solid rgba(0, 240, 255, 0.1);
-        box-shadow: 0 0 6px rgba(0, 240, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 0 6px var(--brand-glow-dim);
       }
       .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-        background: rgba(0, 240, 255, 0.4);
-        box-shadow: 0 0 10px rgba(0, 240, 255, 0.4);
+        background: var(--brand-glow);
+        box-shadow: 0 0 10px var(--brand-glow);
       }
       .custom-scrollbar::-webkit-scrollbar-corner {
         background: transparent;

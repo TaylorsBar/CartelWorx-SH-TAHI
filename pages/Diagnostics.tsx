@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown';
 
 const Diagnostics: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: '1', text: "Hello! I'm KC, your AI diagnostic assistant. Ask me anything about your vehicle's performance, issues, or potential upgrades. For example: 'Why is my engine running rough?'", sender: 'ai' }
+    { id: '1', text: "System Online. KC Diagnostic Core initialized. Awaiting queries regarding vehicle status, error codes, or telemetry analysis.", sender: 'ai' }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -42,7 +42,7 @@ const Diagnostics: React.FC = () => {
     } catch (error) {
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
-        text: "Sorry, I couldn't get a response. Please check your connection and try again.",
+        text: "Error: Uplink connection failed. Please retry transmission.",
         sender: 'ai',
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -52,54 +52,74 @@ const Diagnostics: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-black rounded-lg border border-brand-cyan/30 shadow-lg">
-      <div className="p-4 border-b border-brand-cyan/30">
-        <h2 className="text-xl font-bold text-gray-100 font-display">Natural Language Diagnostics</h2>
-        <p className="text-sm text-gray-400">Ask KC for help</p>
+    <div className="flex flex-col h-full bg-[#050508] relative overflow-hidden font-mono">
+      {/* Background Grid */}
+      <div className="absolute inset-0 opacity-20 pointer-events-none" 
+        style={{ backgroundImage: 'linear-gradient(rgba(0, 240, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 240, 255, 0.1) 1px, transparent 1px)', backgroundSize: '20px 20px' }}
+      ></div>
+
+      {/* Header */}
+      <div className="p-4 border-b border-brand-cyan/30 bg-black/50 backdrop-blur-md flex justify-between items-center z-10">
+        <div>
+            <h2 className="text-xl font-bold text-brand-cyan tracking-widest uppercase">Secure Uplink // TERMINAL</h2>
+            <p className="text-xs text-gray-400">Encryption: AES-256 // Status: <span className="text-green-500 animate-pulse">CONNECTED</span></p>
+        </div>
+        <div className="flex gap-2">
+            <div className="w-2 h-2 bg-brand-cyan rounded-full"></div>
+            <div className="w-2 h-2 bg-brand-cyan rounded-full opacity-50"></div>
+            <div className="w-2 h-2 bg-brand-cyan rounded-full opacity-25"></div>
+        </div>
       </div>
-      <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
-        <div className="space-y-4">
-          {messages.map((msg) => (
-            <div key={msg.id} className={`flex items-start gap-3 ${msg.sender === 'user' ? 'justify-end' : ''}`}>
-              {msg.sender === 'ai' && <div className="w-8 h-8 rounded-full bg-brand-cyan flex-shrink-0 mt-1 shadow-glow-cyan"></div>}
-              <div className={`max-w-xl p-3 rounded-lg ${msg.sender === 'user' ? 'bg-brand-blue text-white' : 'bg-base-800 text-gray-200'}`}>
-                <div className="prose prose-sm prose-invert max-w-none">
-                  <ReactMarkdown>{msg.text}</ReactMarkdown>
+
+      {/* Chat Area */}
+      <div className="flex-1 p-4 overflow-y-auto custom-scrollbar z-10 space-y-6">
+        {messages.map((msg) => (
+            <div key={msg.id} className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
+                <div className={`text-[10px] uppercase mb-1 tracking-wider ${msg.sender === 'user' ? 'text-brand-blue' : 'text-brand-cyan'}`}>
+                    {msg.sender === 'user' ? 'OPERATOR' : 'SYSTEM CORE'}
                 </div>
-              </div>
+                <div className={`max-w-2xl p-4 rounded-lg border backdrop-blur-sm ${
+                    msg.sender === 'user' 
+                    ? 'bg-brand-blue/10 border-brand-blue/30 text-white rounded-tr-none' 
+                    : 'bg-brand-cyan/5 border-brand-cyan/20 text-gray-200 rounded-tl-none'
+                }`}>
+                    <div className="prose prose-sm prose-invert max-w-none">
+                        <ReactMarkdown>{msg.text}</ReactMarkdown>
+                    </div>
+                </div>
             </div>
-          ))}
-          {isLoading && (
-             <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-brand-cyan flex-shrink-0 mt-1 shadow-glow-cyan"></div>
-                <div className="max-w-xl p-3 rounded-lg bg-base-800 text-gray-200">
+        ))}
+        {isLoading && (
+             <div className="flex flex-col items-start">
+                <div className="text-[10px] uppercase mb-1 tracking-wider text-brand-cyan">SYSTEM CORE</div>
+                <div className="p-4 rounded-lg bg-brand-cyan/5 border border-brand-cyan/20 rounded-tl-none">
                   <div className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-150"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-300"></div>
+                    <span className="text-brand-cyan text-xs animate-pulse">PROCESSING DATA STREAM...</span>
                   </div>
                 </div>
             </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+        )}
+        <div ref={messagesEndRef} />
       </div>
-      <div className="p-4 border-t border-brand-cyan/30">
-        <form onSubmit={handleSend} className="flex items-center gap-3">
+
+      {/* Input Area */}
+      <div className="p-4 border-t border-brand-cyan/30 bg-black/80 backdrop-blur-md z-10">
+        <form onSubmit={handleSend} className="flex items-center gap-0 bg-[#0a0c10] border border-gray-700 rounded overflow-hidden shadow-lg focus-within:border-brand-cyan transition-colors">
+          <div className="px-3 py-3 bg-gray-900 text-brand-cyan font-bold select-none">{'>'}</div>
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your question here..."
-            className="flex-1 bg-base-800 border border-base-700 rounded-md px-4 py-2 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-cyan"
+            placeholder="Enter command or query..."
+            className="flex-1 bg-transparent border-none px-4 py-3 text-white placeholder-gray-600 focus:ring-0 font-mono"
             disabled={isLoading}
           />
           <button
             type="submit"
             disabled={isLoading}
-            className="bg-brand-cyan text-black font-semibold px-4 py-2 rounded-md disabled:bg-base-700 disabled:cursor-not-allowed hover:bg-cyan-300 transition-colors shadow-glow-cyan"
+            className="bg-brand-cyan/10 text-brand-cyan font-bold px-6 py-3 hover:bg-brand-cyan hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider text-sm"
           >
-            {isLoading ? 'Sending...' : 'Send'}
+            Transmit
           </button>
         </form>
       </div>

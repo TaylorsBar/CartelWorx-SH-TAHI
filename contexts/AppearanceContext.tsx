@@ -2,7 +2,8 @@
 import React, { createContext, useState, useEffect, useMemo } from 'react';
 
 export type Theme = 'rally' | 'modern' | 'classic' | 'haltech' | 'minimalist' | 'pro-tuner';
-export type AccentMaterial = 'cyan' | 'brushed-brass' | 'satin-brass' | 'antique-brass' | 'carbon-fiber';
+export type ColorPalette = 'cyan' | 'red' | 'green' | 'purple' | 'amber';
+export type SurfaceMaterial = 'glass' | 'carbon' | 'brushed-metal' | 'matte';
 export type LEDMode = 'solid' | 'pulse' | 'music';
 export type CopilotAudioOutput = 'phone' | 'stereo';
 
@@ -16,8 +17,10 @@ export interface LEDSettings {
 interface AppearanceContextProps {
   theme: Theme;
   setTheme: (theme: Theme) => void;
-  accentMaterial: AccentMaterial;
-  setAccentMaterial: (material: AccentMaterial) => void;
+  colorPalette: ColorPalette;
+  setColorPalette: (palette: ColorPalette) => void;
+  surfaceMaterial: SurfaceMaterial;
+  setSurfaceMaterial: (material: SurfaceMaterial) => void;
   ledSettings: LEDSettings;
   setLedSettings: (settings: Partial<LEDSettings>) => void;
   copilotAudioOutput: CopilotAudioOutput;
@@ -34,8 +37,10 @@ const defaultLedSettings: LEDSettings = {
 export const AppearanceContext = createContext<AppearanceContextProps>({
   theme: 'haltech',
   setTheme: () => {},
-  accentMaterial: 'cyan',
-  setAccentMaterial: () => {},
+  colorPalette: 'cyan',
+  setColorPalette: () => {},
+  surfaceMaterial: 'glass',
+  setSurfaceMaterial: () => {},
   ledSettings: defaultLedSettings,
   setLedSettings: () => {},
   copilotAudioOutput: 'phone',
@@ -46,8 +51,11 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [theme, setThemeState] = useState<Theme>(() => {
       return (localStorage.getItem('vehicle-theme') as Theme) || 'haltech';
   });
-  const [accentMaterial, setAccentMaterialState] = useState<AccentMaterial>(() => {
-      return (localStorage.getItem('vehicle-accent-material') as AccentMaterial) || 'cyan';
+  const [colorPalette, setColorPaletteState] = useState<ColorPalette>(() => {
+      return (localStorage.getItem('vehicle-palette') as ColorPalette) || 'cyan';
+  });
+  const [surfaceMaterial, setSurfaceMaterialState] = useState<SurfaceMaterial>(() => {
+      return (localStorage.getItem('vehicle-material') as SurfaceMaterial) || 'glass';
   });
   const [ledSettings, setLedSettingsState] = useState<LEDSettings>(() => {
       const saved = localStorage.getItem('vehicle-led-settings');
@@ -63,9 +71,14 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [theme]);
   
   useEffect(() => {
-    document.documentElement.setAttribute('data-material', accentMaterial);
-    localStorage.setItem('vehicle-accent-material', accentMaterial);
-  }, [accentMaterial]);
+    document.documentElement.setAttribute('data-palette', colorPalette);
+    localStorage.setItem('vehicle-palette', colorPalette);
+  }, [colorPalette]);
+  
+  useEffect(() => {
+    document.documentElement.setAttribute('data-material', surfaceMaterial);
+    localStorage.setItem('vehicle-material', surfaceMaterial);
+  }, [surfaceMaterial]);
   
   useEffect(() => {
     localStorage.setItem('vehicle-led-settings', JSON.stringify(ledSettings));
@@ -90,8 +103,12 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setThemeState(newTheme);
   };
   
-  const setAccentMaterial = (newMaterial: AccentMaterial) => {
-    setAccentMaterialState(newMaterial);
+  const setColorPalette = (newPalette: ColorPalette) => {
+    setColorPaletteState(newPalette);
+  }
+  
+  const setSurfaceMaterial = (newMaterial: SurfaceMaterial) => {
+    setSurfaceMaterialState(newMaterial);
   };
   
   const setLedSettings = (newSettings: Partial<LEDSettings>) => {
@@ -105,13 +122,15 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const value = useMemo(() => ({
     theme,
     setTheme,
-    accentMaterial,
-    setAccentMaterial,
+    colorPalette,
+    setColorPalette,
+    surfaceMaterial,
+    setSurfaceMaterial,
     ledSettings,
     setLedSettings,
     copilotAudioOutput,
     setCopilotAudioOutput
-  }), [theme, accentMaterial, ledSettings, copilotAudioOutput]);
+  }), [theme, colorPalette, surfaceMaterial, ledSettings, copilotAudioOutput]);
 
   return (
     <AppearanceContext.Provider value={value}>

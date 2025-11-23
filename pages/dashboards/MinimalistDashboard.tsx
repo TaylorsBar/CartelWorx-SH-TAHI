@@ -1,85 +1,71 @@
 
 import React from 'react';
 import { useVehicleData } from '../../hooks/useVehicleData';
-import { SensorDataPoint } from '../../types';
-import MinimalistGauge from '../../components/gauges/MinimalistGauge';
-import InfoPanel from '../../components/infopanels/InfoPanel';
-import BatteryBar from '../../components/gauges/BatteryBar';
-import Map from '../../components/Map';
+import { useAnimatedValue } from '../../hooks/useAnimatedValue';
+
+const ThinGauge: React.FC<{ value: number; max: number; label: string; unit: string; color?: string }> = ({ value, max, label, unit, color = 'white' }) => {
+    const animatedValue = useAnimatedValue(value);
+    const radius = 60;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference - (animatedValue / max) * circumference;
+
+    return (
+        <div className="relative w-40 h-40 flex items-center justify-center">
+            <svg className="w-full h-full -rotate-90">
+                <circle cx="50%" cy="50%" r={radius} fill="none" stroke="#222" strokeWidth="2" />
+                <circle 
+                    cx="50%" cy="50%" r={radius} fill="none" stroke={color} strokeWidth="2" 
+                    strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
+                    className="transition-[stroke-dashoffset] duration-300"
+                />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-3xl font-light text-white font-sans">{animatedValue.toFixed(0)}</span>
+                <span className="text-[10px] text-gray-500 uppercase tracking-widest font-sans mt-1">{unit}</span>
+            </div>
+            <div className="absolute bottom-[-1.5rem] text-xs font-medium text-gray-400 uppercase tracking-widest">{label}</div>
+        </div>
+    );
+};
+
+const StatItem: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+    <div className="flex flex-col items-start p-4 border-l border-gray-800">
+        <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1">{label}</span>
+        <span className="text-xl font-medium text-white font-sans">{value}</span>
+    </div>
+);
 
 const MinimalistDashboard: React.FC = () => {
     const { latestData } = useVehicleData();
-    const d: SensorDataPoint = latestData;
+    const d = latestData;
 
     return (
-        <div className="flex h-full w-full items-center justify-center p-4 md:p-8 theme-background">
-            <div 
-                className="w-full h-full max-w-7xl max-h-[800px] grid grid-cols-5 grid-rows-3 gap-6"
-                style={{
-                    gridTemplateAreas: `
-                        ".    speed   speed   nav nav"
-                        "rpm  rpm     aux     nav nav"
-                        "range battery battery climate ."
-                    `
-                }}
-            >
-                <div style={{ gridArea: 'speed' }} className="flex items-center justify-end">
-                    <MinimalistGauge 
-                        value={d.speed}
-                        min={0}
-                        max={160}
-                        unit="mph"
-                        size="large"
-                    />
+        <div className="w-full h-full bg-[#080808] flex flex-col items-center justify-center p-12 font-sans">
+            {/* Header */}
+            <div className="w-full max-w-5xl flex justify-between items-end mb-12 border-b border-gray-900 pb-4">
+                <div>
+                    <h1 className="text-white text-2xl font-light tracking-tight">Genesis <span className="text-gray-600">Pure</span></h1>
+                    <p className="text-gray-600 text-xs mt-1">Zero Emissions Telemetry</p>
                 </div>
-                <div style={{ gridArea: 'rpm' }} className="flex items-center justify-end">
-                    <MinimalistGauge 
-                        value={d.rpm}
-                        min={0}
-                        max={8000}
-                        unit="x1000 RPM"
-                        size="medium"
-                    />
+                <div className="text-right">
+                    <div className="text-4xl font-light text-white">{d.speed.toFixed(0)}</div>
+                    <div className="text-xs text-gray-500 uppercase tracking-widest">km/h</div>
                 </div>
-                 <div style={{ gridArea: 'aux' }} className="flex items-center justify-start pl-8">
-                     <MinimalistGauge 
-                        value={d.turboBoost * 14.5}
-                        min={-10}
-                        max={10}
-                        unit=""
-                        size="small"
-                    />
-                </div>
-                <div style={{ gridArea: 'nav' }}>
-                    <InfoPanel title="NAVIGATION">
-                       <div className="p-2 h-full w-full">
-                            <Map lat={d.latitude} lon={d.longitude} />
-                        </div>
-                    </InfoPanel>
-                </div>
-                <div style={{ gridArea: 'range' }}>
-                    <InfoPanel title="RANGE">
-                        <div className="flex flex-col items-center justify-center h-full">
-                            <div className="text-6xl font-display font-bold text-white" style={{ textShadow: '0 0 8px #fff'}}>272<span className="text-2xl ml-2">mi</span></div>
-                        </div>
-                    </InfoPanel>
-                </div>
-                <div style={{ gridArea: 'battery' }}>
-                    <InfoPanel title="BATTERY">
-                         <div className="flex items-center justify-center h-full gap-6 px-4">
-                            <BatteryBar percentage={82} />
-                            <div className="text-5xl font-display font-bold text-white" style={{ textShadow: '0 0 8px #fff'}}>82%</div>
-                        </div>
-                    </InfoPanel>
-                </div>
-                <div style={{ gridArea: 'climate' }}>
-                     <InfoPanel title="CLIMATE">
-                         <div className="flex items-center justify-center h-full gap-2">
-                             <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M19.95,10.28v-.05a2,2,0,0,0-1.8-2l-1.45-.2A4.33,4.33,0,0,0,13,4.36a4.5,4.5,0,0,0-4.44,4.78,4.3,4.3,0,0,0-1.44.52l-1.28.64a2,2,0,0,0-1,1.75v.05a2,2,0,0,0,1.8,2l1.45.2a4.33,4.33,0,0,0,3.67,3.67l.2,1.45a2,2,0,0,0,2,1.8h.05a2,2,0,0,0,2-1.8l.2-1.45a4.33,4.33,0,0,0,3.15-3.15l1.45-.2a2,2,0,0,0,1.8-2Z"/></svg>
-                             <div className="text-3xl font-display font-bold text-white" style={{ textShadow: '0 0 8px #fff'}}>72°<span className="text-xl">F</span></div>
-                        </div>
-                     </InfoPanel>
-                </div>
+            </div>
+
+            {/* Main Gauges */}
+            <div className="flex flex-wrap justify-center gap-16 mb-16">
+                <ThinGauge label="Motor RPM" value={d.rpm} max={8000} unit="RPM" />
+                <ThinGauge label="Range" value={284} max={400} unit="KM" color="#4ade80" />
+                <ThinGauge label="Efficiency" value={88} max={100} unit="%" color="#60a5fa" />
+            </div>
+
+            {/* Footer Stats */}
+            <div className="w-full max-w-5xl grid grid-cols-4 gap-4">
+                <StatItem label="Battery" value={`${d.batteryVoltage.toFixed(1)} V`} />
+                <StatItem label="Motor Temp" value={`${d.engineTemp.toFixed(0)} °C`} />
+                <StatItem label="Consumption" value="14.2 kWh" />
+                <StatItem label="Regen" value="Level 2" />
             </div>
         </div>
     );

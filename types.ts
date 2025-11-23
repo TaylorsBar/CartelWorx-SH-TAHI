@@ -167,3 +167,10 @@ export interface RaceSession {
     quarterMileTime: number | null;
     quarterMileSpeed: number | null;
 }
+
+// Types for Co-Pilot Intelligent Actions
+export interface CoPilotAction {
+  action: 'NAVIGATE' | 'SPEAK' | 'TOGGLE_FEATURE' | 'ANALYZE';
+  payload?: string; // Route path, feature name, or null
+  textToSpeak: string;
+}

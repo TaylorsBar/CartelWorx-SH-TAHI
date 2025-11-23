@@ -55,100 +55,96 @@ const Hedera: React.FC = () => {
     };
 
     return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-bold text-gray-100 font-display">Hedera DLT Integration</h1>
-                <p className="text-gray-400 mt-1">Creating an immutable, tamper-proof audit trail for your vehicle's history.</p>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-black text-center p-4 rounded-lg border border-brand-cyan/30 shadow-lg">
-                    <p className="text-sm text-gray-400">Network Status</p>
-                    <p className="font-semibold text-green-400">Connected to Mainnet</p>
+        <div className="h-full bg-[#050508] font-mono text-gray-300 relative overflow-hidden flex flex-col p-6">
+            {/* Background Network Mesh */}
+             <div className="absolute inset-0 opacity-10 pointer-events-none" style={{
+                backgroundImage: `radial-gradient(circle at 50% 50%, #444 1px, transparent 1px)`,
+                backgroundSize: '30px 30px'
+            }}></div>
+
+            <div className="mb-8 flex justify-between items-end border-b border-gray-800 pb-4 z-10">
+                <div>
+                    <h1 className="text-2xl font-bold text-white tracking-widest uppercase">Distributed Ledger // NODE</h1>
+                    <p className="text-xs text-gray-500 mt-1">Network: <span className="text-green-500">HEDERA MAINNET</span> // Consensus: <span className="text-green-500">ACTIVE</span></p>
                 </div>
-                <div className="bg-black text-center p-4 rounded-lg border border-brand-cyan/30 shadow-lg">
-                    <p className="text-sm text-gray-400">Account ID</p>
-                    <p className="font-mono text-gray-200">0.0.12345</p>
-                </div>
-                <div className="bg-black text-center p-4 rounded-lg border border-brand-cyan/30 shadow-lg">
-                    <p className="text-sm text-gray-400">Balance</p>
-                    <p className="font-mono text-gray-200">4,501.2345 HBAR</p>
+                <div className="text-right">
+                    <div className="text-xs text-gray-500 uppercase mb-1">Account Balance</div>
+                    <div className="text-xl font-bold text-white">4,501.2345 <span className="text-gray-600 text-sm">HBAR</span></div>
                 </div>
             </div>
 
-            {/* Log New Event */}
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                <div className="lg:col-span-2 bg-black p-6 rounded-lg border border-brand-cyan/30 shadow-lg">
-                    <h2 className="text-lg font-semibold border-b border-brand-cyan/30 pb-2 mb-4 font-display">Log a New Immutable Record</h2>
-                    <form onSubmit={handleLogEvent} className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 z-10 flex-1 min-h-0">
+                {/* Left Panel: Submission Form */}
+                <div className="lg:col-span-1 bg-[#0a0a0a] border border-gray-800 p-6 flex flex-col shadow-lg">
+                    <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-800 pb-2">Submit Transaction</h2>
+                    
+                    <form onSubmit={handleLogEvent} className="space-y-4 flex-1">
                         <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-1">Vehicle (VIN)</label>
-                            <input type="text" value={vin} onChange={e => setVin(e.target.value)} className="w-full bg-base-800 border border-base-700 rounded-md px-3 py-2 text-gray-200" required />
+                            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Target Asset (VIN)</label>
+                            <input type="text" value={vin} onChange={e => setVin(e.target.value)} className="w-full bg-[#111] border border-gray-700 rounded-none px-3 py-2 text-white focus:border-brand-cyan focus:outline-none" required />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-1">Event Type</label>
-                            <select value={eventType} onChange={e => setEventType(e.target.value as HederaEventType)} className="w-full bg-base-800 border border-base-700 rounded-md px-3 py-2 text-gray-200">
+                            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Event Class</label>
+                            <select value={eventType} onChange={e => setEventType(e.target.value as HederaEventType)} className="w-full bg-[#111] border border-gray-700 rounded-none px-3 py-2 text-white focus:border-brand-cyan focus:outline-none">
                                 {Object.values(HederaEventType).map(type => <option key={type} value={type}>{type}</option>)}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-1">Summary / Notes</label>
-                            <textarea value={summary} onChange={e => setSummary(e.target.value)} className="w-full bg-base-800 border border-base-700 rounded-md px-3 py-2 text-gray-200" rows={3} placeholder="e.g., Replaced spark plugs and ignition coils." required></textarea>
+                            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Payload Data</label>
+                            <textarea value={summary} onChange={e => setSummary(e.target.value)} className="w-full bg-[#111] border border-gray-700 rounded-none px-3 py-2 text-white focus:border-brand-cyan focus:outline-none" rows={4} placeholder="Enter service details or diagnostic codes..." required></textarea>
                         </div>
-                        <button type="submit" disabled={isSubmitting} className="w-full bg-brand-blue text-white font-semibold py-2 rounded-md hover:bg-blue-600 transition-colors shadow-glow-blue disabled:bg-base-700">
-                            {isSubmitting ? 'Submitting to Hedera...' : 'Log Event to Hedera'}
-                        </button>
+                        
+                        <div className="pt-4">
+                             <button type="submit" disabled={isSubmitting} className="w-full bg-white text-black font-bold py-3 hover:bg-gray-200 transition-colors disabled:opacity-50 uppercase tracking-widest text-sm">
+                                {isSubmitting ? 'Hashing & Broadcasting...' : 'Sign & Broadcast'}
+                            </button>
+                        </div>
                     </form>
+
                     {submissionResult && (
-                        <div className={`mt-4 p-3 rounded-md text-sm ${submissionResult.success ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'}`}>
-                            {submissionResult.success ? (
-                                <>
-                                    <strong>Success!</strong> Transaction ID: <a href="#" className="underline font-mono break-all">{submissionResult.txId}</a>
-                                </>
-                            ) : (
-                                <><strong>Error:</strong> {submissionResult.error}</>
-                            )}
+                        <div className={`mt-4 p-3 border-l-2 ${submissionResult.success ? 'border-green-500 bg-green-900/10' : 'border-red-500 bg-red-900/10'}`}>
+                            <div className="text-xs font-bold uppercase mb-1">{submissionResult.success ? 'Transaction Confirmed' : 'Transaction Failed'}</div>
+                            {submissionResult.success && <div className="text-[10px] text-gray-500 break-all">{submissionResult.txId}</div>}
                         </div>
                     )}
                 </div>
 
-                {/* Recent Records */}
-                <div className="lg:col-span-3 bg-black rounded-lg border border-brand-cyan/30 shadow-lg">
-                    <div className="p-4 border-b border-brand-cyan/30">
-                        <h2 className="text-lg font-semibold text-gray-100 font-display">Recent Immutable Records</h2>
+                {/* Right Panel: The Ledger */}
+                <div className="lg:col-span-2 bg-[#0a0a0a] border border-gray-800 flex flex-col shadow-lg">
+                    <div className="p-4 border-b border-gray-800 bg-[#111]">
+                        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Immutable Record Stream</h2>
                     </div>
-                    <div className="overflow-x-auto custom-scrollbar">
-                        <table className="min-w-full divide-y divide-base-700/50">
-                            <thead className="bg-base-800/50">
-                                <tr>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Timestamp</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Event</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Summary</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Verification</th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-black divide-y divide-base-700/50">
-                                {records.map(rec => (
-                                    <tr key={rec.id} className="hover:bg-base-800/40">
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm font-mono text-gray-400">{rec.timestamp}</td>
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-200">{rec.eventType}</td>
-                                        <td className="px-4 py-4 text-sm text-gray-300 max-w-xs truncate" title={rec.summary}>{rec.summary}</td>
-                                        <td className="px-4 py-4 whitespace-nowrap">
-                                            {verificationStatus[rec.id] === 'success' ? (
-                                                 <span className="inline-flex items-center text-green-400">
-                                                    <svg className="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path></svg>
-                                                    Verified
-                                                </span>
-                                            ) : (
-                                                <button onClick={() => handleVerify(rec.id)} disabled={verifyingRecordId === rec.id} className="bg-base-700 text-gray-200 px-3 py-1 text-xs font-semibold rounded-md hover:bg-base-600 disabled:opacity-50">
-                                                    {verifyingRecordId === rec.id ? 'Verifying...' : 'Verify'}
-                                                </button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-0">
+                        {records.map((rec, i) => (
+                            <div key={rec.id} className="border-b border-gray-800 p-4 hover:bg-[#111] transition-colors group">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div className="text-xs text-brand-cyan uppercase font-bold tracking-wider flex items-center gap-2">
+                                        <div className="w-1.5 h-1.5 bg-brand-cyan rounded-full"></div>
+                                        {rec.eventType}
+                                    </div>
+                                    <div className="text-xs text-gray-600">{rec.timestamp}</div>
+                                </div>
+                                <div className="text-sm text-gray-300 mb-2 font-sans">{rec.summary}</div>
+                                <div className="flex justify-between items-end">
+                                    <div className="flex flex-col gap-1">
+                                        <div className="text-[10px] text-gray-600 uppercase">TX ID</div>
+                                        <div className="text-[10px] text-gray-500 font-mono bg-black px-2 py-1 border border-gray-800 rounded-sm">{rec.hederaTxId}</div>
+                                    </div>
+                                    
+                                    <div>
+                                         {verificationStatus[rec.id] === 'success' ? (
+                                             <div className="text-green-500 text-xs font-bold uppercase flex items-center">
+                                                 [ Verified On-Chain ]
+                                             </div>
+                                         ) : (
+                                            <button onClick={() => handleVerify(rec.id)} disabled={verifyingRecordId === rec.id} className="text-xs text-gray-500 hover:text-white underline decoration-gray-700 uppercase">
+                                                {verifyingRecordId === rec.id ? 'Validating...' : 'Verify Hash'}
+                                            </button>
+                                         )}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>

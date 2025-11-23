@@ -15,60 +15,66 @@ export const MOCK_LOGS: MaintenanceRecord[] = [
 const MaintenanceLog: React.FC = () => {
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center border-b border-gray-800 pb-4">
         <div>
-            <h1 className="text-2xl font-bold text-gray-100 font-display">Maintenance Logbook</h1>
-            <p className="text-gray-400 mt-1">An immutable record of your vehicle's service history.</p>
+            <h1 className="text-2xl font-bold text-white font-display tracking-tight">Service Database</h1>
+            <p className="text-gray-500 text-sm mt-1">Immutable Maintenance Records // VIN: JN1AZ00Z9ZT000123</p>
         </div>
-        <button className="bg-brand-cyan text-black font-semibold px-4 py-2 rounded-md hover:bg-cyan-300 transition-colors shadow-glow-cyan">
-            Add New Record
+        <button className="bg-white/5 hover:bg-white/10 text-brand-cyan border border-brand-cyan/50 font-semibold px-6 py-2 rounded uppercase text-xs tracking-wider transition-all shadow-[0_0_15px_rgba(0,240,255,0.1)]">
+            + Log Entry
         </button>
       </div>
       
-      <div className="bg-black rounded-lg border border-brand-cyan/30 shadow-lg overflow-hidden">
-        <div className="overflow-x-auto custom-scrollbar">
-          <table className="min-w-full divide-y divide-base-700/50">
-            <thead className="bg-base-800/50">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Date</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Service / Recommendation</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Notes</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
-              </tr>
-            </thead>
-            <tbody className="bg-black divide-y divide-base-700/50">
-              {MOCK_LOGS.map((log) => (
-                <tr key={log.id} className="hover:bg-base-800/40">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-300">{log.date}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-200">
-                    <div className="flex items-center">
-                      {log.isAiRecommendation && <span className="text-brand-cyan mr-2 font-mono text-xs">[AI]</span>}
-                      {log.isAiRecommendation ? <span className="text-brand-cyan">{log.service}</span> : log.service}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{log.notes}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    {log.verified ? (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900/50 text-green-400 border border-green-700">
-                        <VerifiedIcon className="w-4 h-4 mr-1.5 text-green-400" />
-                        Verified
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-900/50 text-yellow-400 border border-yellow-700">
-                        Pending
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <div className="grid grid-cols-4 gap-4 mb-6">
+          <div className="bg-[#111] border border-gray-800 p-4 rounded">
+              <div className="text-xs text-gray-500 uppercase font-bold">Total Services</div>
+              <div className="text-2xl font-mono text-white mt-1">14</div>
+          </div>
+          <div className="bg-[#111] border border-gray-800 p-4 rounded">
+              <div className="text-xs text-gray-500 uppercase font-bold">Verified</div>
+              <div className="text-2xl font-mono text-green-500 mt-1">12</div>
+          </div>
+          <div className="bg-[#111] border border-gray-800 p-4 rounded">
+              <div className="text-xs text-gray-500 uppercase font-bold">Pending</div>
+              <div className="text-2xl font-mono text-yellow-500 mt-1">2</div>
+          </div>
+          <div className="bg-[#111] border border-gray-800 p-4 rounded">
+              <div className="text-xs text-gray-500 uppercase font-bold">Health Score</div>
+              <div className="text-2xl font-mono text-brand-cyan mt-1">98%</div>
+          </div>
       </div>
-       <div className="text-center mt-4">
-        <button className="text-brand-cyan font-semibold hover:underline">
-            Generate Vehicle Health Report
-        </button>
+
+      <div className="bg-[#0a0a0a] rounded-lg border border-gray-800 overflow-hidden">
+        <div className="grid grid-cols-12 bg-[#151515] p-3 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-800">
+            <div className="col-span-2">Date</div>
+            <div className="col-span-4">Service Type</div>
+            <div className="col-span-4">Notes</div>
+            <div className="col-span-2 text-right">Verification</div>
+        </div>
+        <div className="divide-y divide-gray-800">
+            {MOCK_LOGS.map((log) => (
+                <div key={log.id} className="grid grid-cols-12 p-4 items-center hover:bg-white/5 transition-colors group">
+                    <div className="col-span-2 font-mono text-sm text-gray-300">{log.date}</div>
+                    <div className="col-span-4 font-semibold text-white flex items-center">
+                        {log.isAiRecommendation && <span className="text-[10px] bg-brand-cyan/20 text-brand-cyan px-1.5 py-0.5 rounded mr-2 border border-brand-cyan/30">AI</span>}
+                        {log.service}
+                    </div>
+                    <div className="col-span-4 text-sm text-gray-500 group-hover:text-gray-400 transition-colors">{log.notes}</div>
+                    <div className="col-span-2 flex justify-end">
+                        {log.verified ? (
+                            <div className="flex items-center text-green-500 bg-green-500/10 px-3 py-1 rounded-full border border-green-500/20 shadow-[0_0_10px_rgba(34,197,94,0.1)]">
+                                <VerifiedIcon className="w-4 h-4 mr-1.5" />
+                                <span className="text-xs font-bold uppercase tracking-wide">Verified</span>
+                            </div>
+                        ) : (
+                            <div className="flex items-center text-yellow-500 bg-yellow-500/10 px-3 py-1 rounded-full border border-yellow-500/20">
+                                <span className="text-xs font-bold uppercase tracking-wide">Pending</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            ))}
+        </div>
       </div>
     </div>
   );
