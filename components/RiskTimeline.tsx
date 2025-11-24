@@ -43,20 +43,21 @@ const MOCK_EVENTS: TimelineEvent[] = [
     }
 ];
 
-const levelStyles = {
-    [AlertLevel.Critical]: {
+// Define styles map with robust string keys
+const levelStyles: Record<string, any> = {
+    'Critical': {
         bg: 'bg-red-900/30',
         border: 'border-red-500',
         text: 'text-red-400',
         icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z'
     },
-    [AlertLevel.Warning]: {
+    'Warning': {
         bg: 'bg-yellow-900/30',
         border: 'border-yellow-500',
         text: 'text-yellow-400',
         icon: 'M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-4v4m0 4h.01'
     },
-    [AlertLevel.Info]: {
+    'Info': {
         bg: 'bg-blue-900/30',
         border: 'border-blue-500',
         text: 'text-blue-400',
@@ -64,8 +65,31 @@ const levelStyles = {
     },
 }
 
+// Helper to safely get styles with a fallback
+const getStyles = (level: AlertLevel | string) => {
+    if (!level) return levelStyles['Info'];
+    
+    // Normalize input to handle case sensitivity or unexpected strings from AI
+    const inputStr = level.toString().toLowerCase();
+    
+    if (inputStr.includes('crit')) return levelStyles['Critical'];
+    if (inputStr.includes('warn')) return levelStyles['Warning'];
+    
+    return levelStyles['Info'];
+};
+
 const EventModal: React.FC<{ event: TimelineEvent, onClose: () => void }> = ({ event, onClose }) => {
-    const styles = levelStyles[event.level];
+    const styles = getStyles(event.level);
+    
+    // Robust fallback in case 'details' is missing from the AI response
+    const details = event.details || {
+        component: 'System',
+        plainEnglishSummary: 'No detailed analysis available.',
+        rootCause: 'Data insufficient for detailed breakdown.',
+        recommendedActions: ['Perform manual inspection.'],
+        tsbs: []
+    };
+
     return (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={onClose}>
             <div className={`w-full max-w-2xl bg-base-900 rounded-lg border ${styles.border} shadow-lg relative`} onClick={(e) => e.stopPropagation()}>
@@ -75,30 +99,30 @@ const EventModal: React.FC<{ event: TimelineEvent, onClose: () => void }> = ({ e
                         <svg className={`w-8 h-8 mr-4 ${styles.text}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={styles.icon} /></svg>
                         <div>
                              <h2 className={`text-2xl font-bold font-display ${styles.text}`}>{event.title}</h2>
-                             <p className="text-sm text-gray-400">{event.timeframe} - {event.details.component}</p>
+                             <p className="text-sm text-gray-400">{event.timeframe} - {details.component}</p>
                         </div>
                     </div>
                    
                     <div className="space-y-4 text-gray-300">
                         <div>
                             <h4 className="font-semibold text-brand-cyan">Summary:</h4>
-                            <p>{event.details.plainEnglishSummary}</p>
+                            <p>{details.plainEnglishSummary}</p>
                         </div>
                          <div>
                             <h4 className="font-semibold text-brand-cyan">KC's Analysis (Root Cause):</h4>
-                            <p>{event.details.rootCause}</p>
+                            <p>{details.rootCause}</p>
                         </div>
                          <div>
                             <h4 className="font-semibold text-brand-cyan">Recommended Actions:</h4>
                             <ul className="list-disc list-inside space-y-1">
-                                {event.details.recommendedActions.map((action, i) => <li key={i}>{action}</li>)}
+                                {details.recommendedActions?.map((action, i) => <li key={i}>{action}</li>)}
                             </ul>
                         </div>
-                        {event.details.tsbs && event.details.tsbs.length > 0 && (
+                        {details.tsbs && details.tsbs.length > 0 && (
                              <div>
                                 <h4 className="font-semibold text-brand-cyan">Related Bulletins/Recalls:</h4>
                                 <ul className="list-disc list-inside space-y-1">
-                                    {event.details.tsbs.map((tsb, i) => <li key={i}>{tsb}</li>)}
+                                    {details.tsbs.map((tsb, i) => <li key={i}>{tsb}</li>)}
                                 </ul>
                             </div>
                         )}
@@ -113,7 +137,7 @@ const RiskTimeline: React.FC<{events: TimelineEvent[]}> = ({ events }) => {
     const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null);
 
     const sortedEvents = [...events].sort((a, b) => 
-        Object.values(AlertLevel).indexOf(b.level) - Object.values(AlertLevel).indexOf(a.level)
+        Object.values(AlertLevel).indexOf(b.level as AlertLevel) - Object.values(AlertLevel).indexOf(a.level as AlertLevel)
     );
 
     if (events.length === 0) {
@@ -129,7 +153,7 @@ const RiskTimeline: React.FC<{events: TimelineEvent[]}> = ({ events }) => {
     return (
         <div className="space-y-4">
             {sortedEvents.map(event => {
-                const styles = levelStyles[event.level];
+                const styles = getStyles(event.level);
                 return (
                     <div key={event.id} onClick={() => setSelectedEvent(event)} className={`p-4 rounded-lg border-l-4 ${styles.border} ${styles.bg} flex items-center cursor-pointer hover:bg-opacity-50 transition-all`}>
                         <div className="flex-shrink-0 mr-4">

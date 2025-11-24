@@ -37,7 +37,12 @@ export const useSpeechRecognition = (onResult: (transcript: string) => void) => 
     };
 
     recognition.onerror = (event: any) => {
-      console.error(`Speech recognition error: ${event.error}`);
+      if (event.error === 'aborted' || event.error === 'not-allowed' && !isListening) {
+        // Benign error when stopping manually or navigating away
+        setIsListening(false);
+        return;
+      }
+      console.debug(`Speech recognition status: ${event.error}`);
       setIsListening(false);
     };
 
@@ -64,7 +69,7 @@ export const useSpeechRecognition = (onResult: (transcript: string) => void) => 
       try {
         recognitionRef.current.start();
       } catch (e) {
-        console.error("Failed to start speech recognition:", e);
+        console.debug("Start listening called while already active or initializing.");
       }
     }
   };

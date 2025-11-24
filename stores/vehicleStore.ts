@@ -278,7 +278,8 @@ export const useVehicleStore = create<VehicleStoreState>((set, get) => ({
     simulationInterval = setInterval(() => {
       const state = get();
       const now = Date.now();
-      const deltaTimeSeconds = (now - lastUpdateTime) / 1000.0;
+      let deltaTimeSeconds = (now - lastUpdateTime) / 1000.0;
+      if (deltaTimeSeconds <= 0 || isNaN(deltaTimeSeconds)) deltaTimeSeconds = 0.001; // Prevent div by zero
       lastUpdateTime = now;
       const prev = state.latestData;
       
@@ -352,6 +353,9 @@ export const useVehicleStore = create<VehicleStoreState>((set, get) => ({
           inputSpeed = Math.max(0, Math.min(simSpeed, SPEED_MAX));
           ekf.fuseObdSpeed(inputSpeed * 1000 / 3600);
       }
+      
+      // Force finite acceleration for physics
+      if (!isFinite(accelEst)) accelEst = 0;
 
       // Generate simulated IMU data
       let gx = (Math.random() - 0.5) * 0.1;

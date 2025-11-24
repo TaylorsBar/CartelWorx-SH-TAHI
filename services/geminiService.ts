@@ -94,13 +94,6 @@ export const getPredictiveAnalysis = async (
   liveData: SensorDataPoint,
   maintenanceHistory: MaintenanceRecord[]
 ) => {
-  // ... (Same implementation as before, just ensuring model string is correct)
-  const prompt = `
-    Analyze the following vehicle data for potential issues.
-    Vehicle: 2022 Subaru WRX (Simulated)
-    ...
-  `;
-  // ... (rest of the function implementation from previous turn, essentially unchanged)
    try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
@@ -124,11 +117,30 @@ export const getPredictiveAnalysis = async (
         1.  **Identify Anomalies**: Look for any unusual patterns.
         2.  **Root Cause**: What are the 3 most likely causes?
         3.  **Predictive Timeline**: What components are at risk?
-        4.  **JSON Output**: { "timelineEvents": [...] }
+        4.  **JSON Output**: Provide strictly valid JSON format with no markdown blocks.
+        
+        **REQUIRED JSON STRUCTURE**:
+        {
+          "timelineEvents": [
+            {
+              "id": "1",
+              "level": "Warning", 
+              "title": "Issue Title",
+              "timeframe": "Next 1000 miles",
+              "details": {
+                 "component": "Component Name",
+                 "rootCause": "Description of cause",
+                 "recommendedActions": ["Action 1", "Action 2"],
+                 "plainEnglishSummary": "Simple summary",
+                 "tsbs": ["Optional TSB ID"]
+              }
+            }
+          ]
+        }
       `,
       config: {
         tools: [{googleSearch: {}}],
-        responseMimeType: "application/json"
+        // DO NOT set responseMimeType when tools are used
       },
     });
 

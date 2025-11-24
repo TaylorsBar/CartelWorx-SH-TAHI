@@ -3,17 +3,33 @@ import React, { useState, useEffect } from 'react';
 import { useVehicleConnection } from '../hooks/useVehicleData';
 import { useAIStore } from '../stores/aiStore';
 import { ObdConnectionState } from '../types';
+import FullScreenIcon from './icons/FullScreenIcon';
 
 const SystemStatusBar: React.FC = () => {
     const { obdState, ekfStats } = useVehicleConnection();
     const { state: aiState, setIsOpen } = useAIStore();
     const [time, setTime] = useState(new Date());
-    const [notifications, setNotifications] = useState<number>(0);
+    const [isFullscreen, setIsFullscreen] = useState(false);
 
     useEffect(() => {
         const timer = setInterval(() => setTime(new Date()), 1000);
-        return () => clearInterval(timer);
+        
+        const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+        document.addEventListener('fullscreenchange', handleFsChange);
+
+        return () => {
+            clearInterval(timer);
+            document.removeEventListener('fullscreenchange', handleFsChange);
+        };
     }, []);
+
+    const toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(e => console.error(e));
+        } else {
+            document.exitFullscreen().catch(e => console.error(e));
+        }
+    };
 
     // Format time HH:MM:SS
     const timeString = time.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
@@ -74,6 +90,15 @@ const SystemStatusBar: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                     <svg className="w-3 h-3 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>
                 </div>
+
+                {/* Fullscreen Toggle */}
+                <button 
+                    onClick={toggleFullscreen}
+                    className="ml-2 p-1 hover:bg-white/10 rounded transition-colors text-gray-500 hover:text-brand-cyan group"
+                    title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+                >
+                    <FullScreenIcon className="w-4 h-4 transition-transform group-hover:scale-110" isFullscreen={isFullscreen} />
+                </button>
             </div>
         </div>
     );
