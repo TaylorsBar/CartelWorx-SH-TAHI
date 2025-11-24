@@ -1,13 +1,19 @@
 
 import { ObdConnectionState } from "../types";
 
-// Standard BLE Service UUIDs for OBDII Adapters (Veepeak, etc.)
-// Many BLE OBD dongles use a custom service UUID.
-const OBD_SERVICE_UUID = "0000fff0-0000-1000-8000-00805f9b34fb";
-const OBD_CHAR_WRITE_UUID = "0000fff2-0000-1000-8000-00805f9b34fb";
-const OBD_CHAR_NOTIFY_UUID = "0000fff1-0000-1000-8000-00805f9b34fb";
+// Service UUIDs
+const OBD_SERVICE_UUID_CUSTOM = "0000fff0-0000-1000-8000-00805f9b34fb"; // Veepeak, etc.
+const OBD_SERVICE_UUID_STANDARD = "000018f0-0000-1000-8000-00805f9b34fb"; // Standard
 
-// Define Web Bluetooth types locally since they might be missing in the environment
+// Characteristic UUIDs (Custom)
+const OBD_CHAR_WRITE_CUSTOM = "0000fff2-0000-1000-8000-00805f9b34fb";
+const OBD_CHAR_NOTIFY_CUSTOM = "0000fff1-0000-1000-8000-00805f9b34fb";
+
+// Characteristic UUIDs (Standard)
+const OBD_CHAR_WRITE_STANDARD = "00002af1-0000-1000-8000-00805f9b34fb"; // or similar, vary by implementation
+const OBD_CHAR_NOTIFY_STANDARD = "00002af0-0000-1000-8000-00805f9b34fb"; 
+
+// Define Web Bluetooth types locally
 type BluetoothDevice = any;
 type BluetoothRemoteGATTServer = any;
 type BluetoothRemoteGATTCharacteristic = any;
@@ -25,7 +31,7 @@ export class ObdService {
   constructor(private onStatusChange: (status: ObdConnectionState) => void) {}
 
   public async connect(): Promise<void> {
-    // @ts-ignore - Navigator.bluetooth is experimental
+    // @ts-ignore
     if (!navigator.bluetooth) {
       console.error("Web Bluetooth API not supported.");
       this.onStatusChange(ObdConnectionState.Error);
@@ -35,13 +41,14 @@ export class ObdService {
     try {
       this.onStatusChange(ObdConnectionState.Connecting);
 
-      // 1. Request Device
+      // 1. Request Device - Scan for both standard and custom UUIDs
       // @ts-ignore
       this.device = await navigator.bluetooth.requestDevice({
-        filters: [{ services: [OBD_SERVICE_UUID] }],
-        // Note: Some devices might not advertise the service UUID directly.
-        // If filtering fails, you might need acceptAllDevices: true and optionalServices.
-        optionalServices: [OBD_SERVICE_UUID] 
+        filters: [
+            { services: [OBD_SERVICE_UUID_CUSTOM] },
+            { services: [OBD_SERVICE_UUID_STANDARD] }
+        ],
+        optionalServices: [OBD_SERVICE_UUID_CUSTOM, OBD_SERVICE_UUID_STANDARD]
       });
 
       this.device!.addEventListener('gattserverdisconnected', this.handleDisconnect);
@@ -50,9 +57,28 @@ export class ObdService {
       this.server = await this.device!.gatt!.connect();
 
       // 3. Get Service & Characteristics
-      const service = await this.server!.getPrimaryService(OBD_SERVICE_UUID);
-      this.writeChar = await service.getCharacteristic(OBD_CHAR_WRITE_UUID);
-      this.notifyChar = await service.getCharacteristic(OBD_CHAR_NOTIFY_UUID);
+      let service = null;
+      try {
+          service = await this.server!.getPrimaryService(OBD_SERVICE_UUID_CUSTOM);
+          this.writeChar = await service.getCharacteristic(OBD_CHAR_WRITE_CUSTOM);
+          this.notifyChar = await service.getCharacteristic(OBD_CHAR_NOTIFY_CUSTOM);
+      } catch (e) {
+          console.log("Custom service not found, trying standard...");
+          try {
+              service = await this.server!.getPrimaryService(OBD_SERVICE_UUID_STANDARD);
+              // Note: Standard characteristics might vary, simplified here for commonly available characteristics
+              const chars = await service.getCharacteristics();
+              // simplistic heuristic: find one with notify, one with write
+              this.notifyChar = chars.find((c: any) => c.properties.notify);
+              this.writeChar = chars.find((c: any) => c.properties.write || c.properties.writeWithoutResponse);
+          } catch (standardErr) {
+              throw new Error("Could not find a supported OBDII service.");
+          }
+      }
+
+      if (!this.writeChar || !this.notifyChar) {
+          throw new Error("Characteristics missing.");
+      }
 
       // 4. Start Notifications
       await this.notifyChar.startNotifications();
@@ -88,11 +114,6 @@ export class ObdService {
     this.onStatusChange(ObdConnectionState.Disconnected);
   };
 
-  /**
-   * Handles incoming data chunks from BLE notification.
-   * ELM327 might split responses across multiple packets.
-   * We buffer until we see the prompt character '>'.
-   */
   private handleNotification = (event: Event) => {
     // @ts-ignore
     const target = event.target as BluetoothRemoteGATTCharacteristic;
@@ -104,7 +125,6 @@ export class ObdService {
     this.currentResponse += chunk;
 
     if (this.currentResponse.includes('>')) {
-      // Response complete
       const fullResponse = this.currentResponse.replace('>', '').trim();
       this.currentResponse = "";
       
@@ -115,30 +135,24 @@ export class ObdService {
     }
   };
 
-  /**
-   * "Handshake" with the ELM327 chip.
-   * Mirrors the Kotlin ObdManager.initializeElm327 logic.
-   */
   private async initializeElm327() {
     this.onStatusChange(ObdConnectionState.Initializing);
+    // Standard initialization sequence
     await this.runCommand("AT Z");   // Reset
     await this.runCommand("AT E0");  // Echo Off
     await this.runCommand("AT L0");  // Linefeeds Off
-    await this.runCommand("AT S0");  // Spaces Off (Optimization for parsing speed)
+    await this.runCommand("AT S0");  // Spaces Off
     await this.runCommand("AT H0");  // Headers Off
-    await this.runCommand("AT SP 0"); // Auto-detect Protocol
+    await this.runCommand("AT ATS 1"); // Adaptive Timing Auto
+    await this.runCommand("AT SP 0"); // Auto Protocol
   }
 
-  /**
-   * Sends a command and awaits the response.
-   * Uses a simple lock (isBusy) to prevent command overlapping.
-   */
   public async runCommand(cmd: string): Promise<string> {
     if (!this.writeChar || !this.device?.gatt?.connected) {
-      throw new Error("OBD Disconnected");
+      // Don't throw if we are just disconnecting, just return empty
+      return "";
     }
 
-    // Simple mutex to prevent overlapping commands
     while (this.isBusy) {
       await new Promise(r => setTimeout(r, 10));
     }
@@ -147,16 +161,14 @@ export class ObdService {
     return new Promise<string>(async (resolve, reject) => {
       this.responseResolver = resolve;
       
-      // Timeout safety
       const timeout = setTimeout(() => {
         this.isBusy = false;
         this.responseResolver = null;
-        reject(new Error(`Command ${cmd} timed out`));
-      }, 2000); // 2s timeout
+        resolve(""); // Resolve empty on timeout to keep loop alive
+      }, 1000); 
 
       try {
         const encoder = new TextEncoder();
-        // Append carriage return
         await this.writeChar!.writeValue(encoder.encode(cmd + "\r"));
       } catch (e) {
         clearTimeout(timeout);
@@ -164,7 +176,6 @@ export class ObdService {
         reject(e);
       }
 
-      // The promise resolves in handleNotification when '>' is received
       const originalResolve = this.responseResolver;
       this.responseResolver = (val: string) => {
         clearTimeout(timeout);
@@ -174,55 +185,100 @@ export class ObdService {
     });
   }
 
-  // --- Parsers (Mirrored from Kotlin implementation) ---
+  // --- Data Parsers ---
+
+  private extractData(response: string, servicePrefix: string): string | null {
+      // Remove spaces, nulls, and carets
+      const clean = response.replace(/[\s\0>]/g, '');
+      
+      // ELM327 might return "41 0C 1A F2" or just "1A F2" depending on headers
+      // We look for the service prefix (e.g. "410C" for RPM)
+      const idx = clean.indexOf(servicePrefix);
+      if (idx !== -1) {
+          return clean.substring(idx + servicePrefix.length);
+      }
+      
+      // If headers are off, we might just get the data bytes. 
+      // Heuristic: Check length. RPM (010C) expects 2 bytes (4 hex chars).
+      // This is risky without headers, but "AT H0" usually retains the "41 0C" part in modern adapters.
+      // If we failed to find prefix, return valid data if it looks like a raw response (no "NO DATA" etc)
+      if (!clean.includes("NODATA") && !clean.includes("ERROR") && !clean.includes("STOPPED")) {
+           return clean; 
+      }
+      
+      return null;
+  }
 
   public parseRpm(response: string): number {
-    // Response ex: "410C1AF2" -> 0x1AF2 / 4
+    // Mode 01, PID 0C. Returns 2 bytes: A, B. RPM = (256*A + B) / 4
     try {
-        const clean = response.replace(/\s/g, '');
-        if (!clean.includes("410C")) return 0;
-        const data = clean.split("410C")[1]; // Get everything after the mode/pid
+        const data = this.extractData(response, "410C");
         if (!data || data.length < 4) return 0;
-        
         const a = parseInt(data.substring(0, 2), 16);
         const b = parseInt(data.substring(2, 4), 16);
         return ((a * 256) + b) / 4;
-    } catch (e) { return 0; }
+    } catch { return 0; }
   }
 
   public parseSpeed(response: string): number {
-    // Response ex: "410D32" -> 0x32 km/h
+    // Mode 01, PID 0D. Returns 1 byte: A. Speed = A km/h
     try {
-        const clean = response.replace(/\s/g, '');
-        if (!clean.includes("410D")) return 0;
-        const data = clean.split("410D")[1];
+        const data = this.extractData(response, "410D");
         if (!data || data.length < 2) return 0;
-
         return parseInt(data.substring(0, 2), 16);
-    } catch (e) { return 0; }
+    } catch { return 0; }
   }
 
-  public parseThrottle(response: string): number {
-    // Response ex: "41117F" -> 0x7F * 100 / 255
-    try {
-        const clean = response.replace(/\s/g, '');
-        if (!clean.includes("4111")) return 0;
-        const data = clean.split("4111")[1];
-        if (!data || data.length < 2) return 0;
-
-        const a = parseInt(data.substring(0, 2), 16);
-        return (a * 100) / 255;
-    } catch (e) { return 0; }
-  }
-  
   public parseCoolant(response: string): number {
-      // 41 05 xx -> A - 40
+      // Mode 01, PID 05. Returns 1 byte: A. Temp = A - 40
       try {
-        const clean = response.replace(/\s/g, '');
-        if (!clean.includes("4105")) return 0;
-        const data = clean.split("4105")[1];
-        const a = parseInt(data.substring(0, 2), 16);
-        return a - 40;
-      } catch (e) { return 0; }
+        const data = this.extractData(response, "4105");
+        if (!data || data.length < 2) return 0;
+        return parseInt(data.substring(0, 2), 16) - 40;
+      } catch { return 0; }
+  }
+
+  public parseIntakeTemp(response: string): number {
+      // Mode 01, PID 0F. Returns 1 byte: A. Temp = A - 40
+      try {
+        const data = this.extractData(response, "410F");
+        if (!data || data.length < 2) return 0;
+        return parseInt(data.substring(0, 2), 16) - 40;
+      } catch { return 0; }
+  }
+
+  public parseMap(response: string): number {
+      // Mode 01, PID 0B. Returns 1 byte: A. kPa
+      try {
+          const data = this.extractData(response, "410B");
+          if (!data || data.length < 2) return 0;
+          return parseInt(data.substring(0, 2), 16);
+      } catch { return 0; }
+  }
+
+  public parseLoad(response: string): number {
+      // Mode 01, PID 04. Returns 1 byte: A. Load = A * 100 / 255
+      try {
+          const data = this.extractData(response, "4104");
+          if (!data || data.length < 2) return 0;
+          return (parseInt(data.substring(0, 2), 16) * 100) / 255;
+      } catch { return 0; }
+  }
+
+  public parseVoltage(response: string): number {
+      // Handle AT RV (e.g., "13.4V") or PID 42 (Control module voltage)
+      if (response.includes("V")) {
+          return parseFloat(response.replace("V", ""));
+      }
+      // Mode 01, PID 42. Returns 2 bytes. (256A+B)/1000
+      try {
+          const data = this.extractData(response, "4142");
+          if (data && data.length >= 4) {
+               const a = parseInt(data.substring(0, 2), 16);
+               const b = parseInt(data.substring(2, 4), 16);
+               return ((a * 256) + b) / 1000;
+          }
+      } catch { return 0; }
+      return 0;
   }
 }

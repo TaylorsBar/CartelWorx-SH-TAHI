@@ -1,285 +1,359 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { IntentAction, ComponentHotspot, VoiceCommandIntent } from '../types';
-import { getVoiceCommandIntent, generateComponentImage } from '../services/geminiService';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useVehicleData } from '../hooks/useVehicleData';
+import { generateComponentImage } from '../services/geminiService';
+import { SensorDataPoint } from '../types';
 import MicrophoneIcon from '../components/icons/MicrophoneIcon';
-import { MOCK_LOGS } from './MaintenanceLog';
 
-// @ts-ignore
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+// --- Types & Config ---
 
-const MOCK_HOTSPOTS: ComponentHotspot[] = [
-    { id: 'o2-sensor', name: 'O2 Sensor', cx: '68%', cy: '75%', status: 'Failing' },
-    { id: 'map-sensor', name: 'MAP Sensor', cx: '55%', cy: '30%', status: 'Warning' },
-    { id: 'alternator', name: 'Alternator', cx: '32%', cy: '65%', status: 'Normal' },
-    { id: 'turbo', name: 'Turbocharger', cx: '80%', cy: '50%', status: 'Normal' },
-    { id: 'intake', name: 'Air Intake', cx: '35%', cy: '25%', status: 'Normal' },
-    { id: 'coolant', name: 'Coolant Reservoir', cx: '15%', cy: '40%', status: 'Normal' },
-    { id: 'oil-filter', name: 'Oil Filter', cx: '50%', cy: '85%', status: 'Normal' },
+interface ARNode {
+    id: string;
+    label: string;
+    cx: number; // Percent X
+    cy: number; // Percent Y
+    dataKey?: keyof SensorDataPoint;
+    unit?: string;
+    description: string;
+    normalRange: [number, number]; // Min, Max for healthy status
+}
+
+const AR_NODES: ARNode[] = [
+    { 
+        id: 'turbo', 
+        label: 'Turbocharger', 
+        cx: 78, cy: 45, 
+        dataKey: 'turboBoost', unit: 'BAR', 
+        description: 'Variable geometry turbine. Monitors boost pressure and spool speed.',
+        normalRange: [-1.0, 1.8]
+    },
+    { 
+        id: 'intake', 
+        label: 'Intake Manifold', 
+        cx: 35, cy: 25, 
+        dataKey: 'inletAirTemp', unit: '°C', 
+        description: 'High-flow composite manifold. Critical for air density and combustion efficiency.',
+        normalRange: [10, 60]
+    },
+    { 
+        id: 'ecu', 
+        label: 'ECU Core', 
+        cx: 55, cy: 20, 
+        dataKey: 'rpm', unit: 'RPM', 
+        description: 'Main processing unit. Controls timing, fuel trim, and sensor fusion.',
+        normalRange: [0, 8000]
+    },
+    { 
+        id: 'battery', 
+        label: 'Power Unit', 
+        cx: 85, cy: 75, 
+        dataKey: 'batteryVoltage', unit: 'V', 
+        description: 'Li-Ion starter battery. Stabilizes voltage for onboard electronics.',
+        normalRange: [12.0, 14.8]
+    },
+    { 
+        id: 'o2', 
+        label: 'Lambda Sensor', 
+        cx: 65, cy: 65, 
+        dataKey: 'o2SensorVoltage', unit: 'V', 
+        description: 'Wideband O2 sensor. Provides feedback for closed-loop fuel control.',
+        normalRange: [0.1, 1.2]
+    },
+    { 
+        id: 'oil', 
+        label: 'Oil Filter', 
+        cx: 45, cy: 80, 
+        dataKey: 'oilPressure', unit: 'BAR', 
+        description: 'High-efficiency filtration. Maintains oil pressure and contaminant removal.',
+        normalRange: [1.0, 6.0]
+    },
+    {
+        id: 'coolant',
+        label: 'Coolant Res.',
+        cx: 15, cy: 40,
+        dataKey: 'engineTemp', unit: '°C',
+        description: 'Expansion tank for engine thermal management system.',
+        normalRange: [70, 105]
+    }
 ];
 
+const Sparkline: React.FC<{ data: number[], width: number, height: number, color: string }> = ({ data, width, height, color }) => {
+    if (data.length < 2) return null;
+    const max = Math.max(...data);
+    const min = Math.min(...data);
+    const range = max - min || 1;
+    
+    const points = data.map((val, i) => {
+        const x = (i / (data.length - 1)) * width;
+        const y = height - ((val - min) / range) * height;
+        return `${x},${y}`;
+    }).join(' ');
+
+    return (
+        <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
+            <polyline points={points} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+            <circle cx={width} cy={height - ((data[data.length-1] - min) / range) * height} r="3" fill={color} />
+        </svg>
+    );
+};
+
 const ARAssistant: React.FC = () => {
-    const [isListening, setIsListening] = useState(false);
-    const [transcript, setTranscript] = useState('');
-    const [highlightedComponent, setHighlightedComponent] = useState<string | null>(null);
-    const [assistantMessage, setAssistantMessage] = useState("Activate the microphone and ask a question, like 'Show me the failing O2 sensor.'");
-    const [isRemoteSessionActive, setIsRemoteSessionActive] = useState(false);
-
-    const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-    const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
-    const [imageError, setImageError] = useState<string | null>(null);
-
-    const processCommand = async (command: string) => {
-        setIsListening(false);
-        setAssistantMessage("Thinking...");
-        setHighlightedComponent(null); 
-        const result: VoiceCommandIntent = await getVoiceCommandIntent(command);
-
-        if (result.confidence < 0.7) {
-            setAssistantMessage("I'm not quite sure what you mean. Could you try rephrasing?");
-            return;
-        }
-
-        switch (result.intent) {
-            case IntentAction.ShowComponent:
-                if (result.component && MOCK_HOTSPOTS.find(h => h.id === result.component)) {
-                    setHighlightedComponent(result.component);
-                } else {
-                    setAssistantMessage("I can't seem to find that component.");
-                }
-                break;
-            case IntentAction.QueryService:
-                const nextService = MOCK_LOGS.find(log => !log.verified && log.isAiRecommendation);
-                if (nextService) {
-                    setAssistantMessage(`Your next recommended service is: ${nextService.service} on or around ${nextService.date}.`);
-                } else {
-                    setAssistantMessage("Your service log is up to date. No immediate recommendations found.");
-                }
-                break;
-            case IntentAction.HideComponent:
-                setHighlightedComponent(null);
-                setAssistantMessage("Highlights cleared. What's next?");
-                break;
-            default:
-                setAssistantMessage("Sorry, I didn't understand that command. You can ask me to show a component or ask about your next service.");
-        }
-    };
+    const { data, latestData } = useVehicleData();
+    const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
+    const [isScanning, setIsScanning] = useState(true);
     
-    useEffect(() => {
-        if (highlightedComponent) {
-            const componentData = MOCK_HOTSPOTS.find(h => h.id === highlightedComponent);
-            if (componentData) {
-                setAssistantMessage(`Highlighting the ${componentData.name}. Status: ${componentData.status}.`);
-            }
-        }
-    }, [highlightedComponent]);
+    // Image Generation State
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [generatedImage, setGeneratedImage] = useState<string | null>(null);
 
-    const handleListen = () => {
-        if (!recognition) {
-            setAssistantMessage("Sorry, your browser doesn't support voice commands.");
-            return;
-        }
+    // Derived State
+    const activeNode = useMemo(() => AR_NODES.find(n => n.id === activeNodeId), [activeNodeId]);
+    
+    // Get recent history for sparkline (last 50 points)
+    const historyData = useMemo(() => {
+        if (!activeNode || !activeNode.dataKey) return [];
+        return data.slice(-50).map(d => d[activeNode.dataKey!] as number);
+    }, [data, activeNode]);
 
-        if (isListening) {
-            recognition.stop();
-            setIsListening(false);
-        } else {
-            setIsListening(true);
-            setTranscript('');
-            recognition.start();
-        }
+    // Handle Node Click
+    const handleNodeClick = (id: string) => {
+        setActiveNodeId(id);
+        setIsScanning(false);
+        setGeneratedImage(null); // Reset image on new selection
     };
 
-    useEffect(() => {
-        if (!recognition) return;
-
-        recognition.onstart = () => setIsListening(true);
-        recognition.onend = () => setIsListening(false);
-        recognition.onerror = (event: any) => {
-            console.error('Speech recognition error:', event.error);
-            setIsListening(false);
-        };
-        recognition.onresult = (event: any) => {
-            const currentTranscript = event.results[0][0].transcript;
-            setTranscript(currentTranscript);
-            processCommand(currentTranscript);
-        };
-    }, []);
-
-    const handleGenerateImage = async () => {
-        if (!highlightedComponent) return;
-
-        const componentData = MOCK_HOTSPOTS.find(h => h.id === highlightedComponent);
-        if (!componentData) return;
-        
-        setIsGeneratingImage(true);
-        setGeneratedImageUrl(null);
-        setImageError(null);
-        setAssistantMessage(`Generating a diagram for the ${componentData.name}...`);
-        
+    // Generate AI Schematic
+    const handleGenerateSchematic = async () => {
+        if (!activeNode) return;
+        setIsGenerating(true);
         try {
-            const imageUrl = await generateComponentImage(componentData.name);
-            setGeneratedImageUrl(imageUrl);
-            setAssistantMessage(`Diagram for ${componentData.name} generated successfully.`);
-        } catch (error) {
-            console.error(error);
-            const errorMessage = "Sorry, I couldn't generate the diagram. Please try again.";
-            setImageError(errorMessage);
-            setAssistantMessage(errorMessage);
+            const img = await generateComponentImage(activeNode.label);
+            setGeneratedImage(img);
+        } catch (e) {
+            console.error(e);
         } finally {
-            setIsGeneratingImage(false);
+            setIsGenerating(false);
         }
-    };
-
-    const hotspotStatusClasses = {
-        'Failing': 'fill-red-500/50 stroke-red-500',
-        'Warning': 'fill-yellow-500/50 stroke-yellow-500',
-        'Normal': 'fill-green-500/50 stroke-green-500',
-    };
-    
-    const statusTextClasses = {
-        'Failing': 'text-red-500',
-        'Warning': 'text-yellow-500',
-        'Normal': 'text-green-500',
     };
 
     return (
-        <div className="flex flex-col lg:flex-row gap-6 h-full p-2">
-            {/* Left Column: AR Viewport */}
-            <div className="w-full lg:w-2/3 bg-black rounded-lg border border-brand-cyan/30 shadow-2xl flex flex-col relative overflow-hidden group">
-                {/* HUD Overlay Elements */}
-                <div className="absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 border-brand-cyan/80 z-20"></div>
-                <div className="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 border-brand-cyan/80 z-20"></div>
-                <div className="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 border-brand-cyan/80 z-20"></div>
-                <div className="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-brand-cyan/80 z-20"></div>
-                
-                <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur px-3 py-1 rounded border border-brand-cyan/30 z-20">
-                     <span className="text-[10px] font-mono font-bold text-brand-cyan uppercase tracking-widest">Live Camera Feed // Analysis Active</span>
+        <div className="relative h-full w-full bg-black overflow-hidden flex">
+            
+            {/* --- AR VIEWPORT (Full Screen Layer) --- */}
+            <div className="absolute inset-0 z-0">
+                {/* Engine Wireframe Background */}
+                <div className="absolute inset-0 flex items-center justify-center bg-[#050505]">
+                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(0,40,60,0.4)_0%,_rgba(0,0,0,0.9)_100%)]"></div>
+                     <img 
+                        src="https://storage.googleapis.com/fpl-assets/ar-engine-wireframe.svg" 
+                        alt="AR Feed" 
+                        className="w-full h-full object-cover opacity-40 mix-blend-screen"
+                        style={{ filter: 'contrast(1.2) brightness(0.8)' }}
+                     />
                 </div>
 
-                {/* Scanline Animation */}
-                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-brand-cyan/10 to-transparent h-[10%] w-full animate-[scan_3s_linear_infinite] pointer-events-none z-10 opacity-50"></div>
-                <style>{`@keyframes scan { 0% { top: -10%; } 100% { top: 110%; } }`}</style>
-
-                <div className="relative w-full h-full flex items-center justify-center bg-[#050505]">
-                    <img src="https://storage.googleapis.com/fpl-assets/ar-engine-wireframe.svg" alt="Engine Wireframe" className="w-full h-full object-contain opacity-80" />
+                {/* SVG Overlay Layer for HUD Lines & Nodes */}
+                <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                    <defs>
+                        <filter id="glow-ar" x="-50%" y="-50%" width="200%" height="200%">
+                            <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+                            <feMerge>
+                                <feMergeNode in="coloredBlur" />
+                                <feMergeNode in="SourceGraphic" />
+                            </feMerge>
+                        </filter>
+                    </defs>
                     
-                    <svg className="absolute top-0 left-0 w-full h-full" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet">
-                        {MOCK_HOTSPOTS.map(hotspot => (
-                            <g key={hotspot.id} className={`transition-all duration-500 ${highlightedComponent === hotspot.id || highlightedComponent === null ? 'opacity-100' : 'opacity-20'}`}>
-                                {highlightedComponent === hotspot.id && (
-                                    // Target Lock Reticle
-                                    <g>
-                                        <circle cx={hotspot.cx} cy={hotspot.cy} r="40" fill="none" stroke="white" strokeWidth="1" strokeDasharray="10 5" className="animate-[spin_4s_linear_infinite]" />
-                                        <line x1={hotspot.cx} y1={hotspot.cy} x2={parseFloat(hotspot.cx) + 50} y2={parseFloat(hotspot.cy) - 50} stroke="white" strokeWidth="1" />
-                                        <text x={parseFloat(hotspot.cx) + 55} y={parseFloat(hotspot.cy) - 55} fill="white" fontSize="14" fontWeight="bold" fontFamily="monospace">TARGET LOCKED</text>
-                                    </g>
+                    {AR_NODES.map((node) => {
+                        const isActive = activeNodeId === node.id;
+                        const val = node.dataKey ? latestData[node.dataKey] : 0;
+                        const isWarning = typeof val === 'number' && (val < node.normalRange[0] || val > node.normalRange[1]);
+                        const color = isWarning ? '#EF4444' : (isActive ? '#00F0FF' : '#FFFFFF');
+
+                        return (
+                            <g key={node.id}>
+                                {/* Connecting Line (Only when active or scanning) */}
+                                {isActive && (
+                                    <path 
+                                        d={`M ${node.cx}% ${node.cy}% L ${node.cx + 10}% ${node.cy - 10}% L 90% ${node.cy - 10}%`}
+                                        fill="none"
+                                        stroke={color}
+                                        strokeWidth="1"
+                                        strokeDasharray="4 2"
+                                        opacity="0.6"
+                                        className="animate-[dash_20s_linear_infinite]"
+                                    />
                                 )}
-                                
-                                <circle 
-                                    cx={hotspot.cx} 
-                                    cy={hotspot.cy} 
-                                    r="10" 
-                                    className={`${hotspotStatusClasses[hotspot.status]} cursor-pointer hover:r-12 transition-all`}
-                                    strokeWidth="2"
-                                    onClick={() => setHighlightedComponent(hotspot.id)}
-                                />
-                                
-                                <text x={hotspot.cx} y={hotspot.cy} dy="25" textAnchor="middle" className="fill-white font-mono text-[10px] uppercase font-bold drop-shadow-md bg-black/50">
-                                    {hotspot.name}
-                                </text>
+
+                                {/* Target Reticle */}
+                                <g 
+                                    transform={`translate(${node.cx * window.innerWidth / 100}, ${node.cy * window.innerHeight / 100})`}
+                                    className="cursor-pointer pointer-events-auto"
+                                    onClick={() => handleNodeClick(node.id)}
+                                >
+                                    {/* Outer Ring */}
+                                    <circle r={isActive ? 30 : 8} stroke={color} strokeWidth="1.5" fill="black" fillOpacity="0.5" 
+                                        className={`transition-all duration-300 ${isActive ? 'opacity-100' : 'opacity-60 hover:opacity-100'}`} 
+                                    />
+                                    
+                                    {/* Inner Pulse */}
+                                    <circle r={4} fill={color} className={isWarning ? 'animate-ping' : ''} />
+                                    
+                                    {/* Brackets for Active State */}
+                                    {isActive && (
+                                        <>
+                                            <path d="M -35 -20 L -35 -35 L -20 -35" fill="none" stroke={color} strokeWidth="2" />
+                                            <path d="M 35 -20 L 35 -35 L 20 -35" fill="none" stroke={color} strokeWidth="2" />
+                                            <path d="M -35 20 L -35 35 L -20 35" fill="none" stroke={color} strokeWidth="2" />
+                                            <path d="M 35 20 L 35 35 L 20 35" fill="none" stroke={color} strokeWidth="2" />
+                                        </>
+                                    )}
+                                    
+                                    {/* Floating Mini Label (When not active) */}
+                                    {!isActive && (
+                                        <text y="25" textAnchor="middle" fill="white" fontSize="10" fontFamily="monospace" opacity="0.8" className="uppercase font-bold drop-shadow-md">
+                                            {node.label}
+                                        </text>
+                                    )}
+                                </g>
                             </g>
-                        ))}
-                    </svg>
-                </div>
+                        );
+                    })}
+                </svg>
+                
+                {/* Scanline Effect */}
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-brand-cyan/5 to-transparent h-[5px] w-full animate-[scan_4s_linear_infinite] pointer-events-none"></div>
             </div>
 
-            {/* Right Column: Controls & Info */}
-            <div className="w-full lg:w-1/3 flex flex-col gap-4">
-                <div className="bg-black p-6 rounded-lg border border-gray-800 shadow-lg flex-grow flex flex-col relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-brand-cyan/20 to-transparent pointer-events-none"></div>
-                    <h2 className="text-sm font-bold border-b border-gray-800 pb-2 mb-4 font-display uppercase tracking-widest text-white">Assistant Uplink</h2>
-                    
-                    <div className="flex flex-col items-center justify-center flex-grow text-center">
-                        <button onClick={handleListen} className={`relative w-20 h-20 rounded-full transition-all duration-300 ${isListening ? 'bg-red-600 shadow-[0_0_20px_rgba(220,38,38,0.5)]' : 'bg-[#1a1a1a] border border-gray-700 hover:border-brand-cyan hover:bg-[#222]'} text-white flex items-center justify-center group`}>
-                            {isListening && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-20"></span>}
-                            <MicrophoneIcon className={`w-8 h-8 ${isListening ? 'text-white' : 'text-brand-cyan group-hover:scale-110 transition-transform'}`} />
-                        </button>
-                        <p className="mt-6 text-gray-400 h-6 font-mono text-xs uppercase tracking-widest">{isListening ? 'Listening...' : (transcript ? `“${transcript}”` : 'Tap to Initiate Command')}</p>
-                    </div>
-                    
-                    <div className="mt-4 p-4 bg-[#111] border-l-2 border-brand-cyan rounded-r text-left min-h-[60px] flex items-center">
-                        <p className="text-gray-300 text-sm italic">"{assistantMessage}"</p>
-                    </div>
-                </div>
-
-                {highlightedComponent && (() => {
-                    const componentData = MOCK_HOTSPOTS.find(h => h.id === highlightedComponent);
-                    if (!componentData) return null;
-                    
-                    return (
-                        <div className="bg-black p-5 rounded-lg border border-gray-800 shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-300">
-                            <div className="flex justify-between items-center mb-3 border-b border-gray-800 pb-2">
-                                <h2 className="text-sm font-bold font-display uppercase tracking-widest text-white">Target Analysis</h2>
-                                <span className={`text-[10px] px-2 py-0.5 rounded uppercase font-bold ${statusTextClasses[componentData.status]} bg-white/5`}>{componentData.status}</span>
-                            </div>
-                            
-                            <div className="space-y-3">
-                                <div className="grid grid-cols-2 gap-2 text-xs">
-                                    <div className="text-gray-500">Component ID</div>
-                                    <div className="text-white font-mono text-right">{componentData.id.toUpperCase()}</div>
-                                    <div className="text-gray-500">Est. Lifespan</div>
-                                    <div className="text-white font-mono text-right">82%</div>
-                                </div>
-                                <button
-                                    onClick={handleGenerateImage}
-                                    disabled={isGeneratingImage}
-                                    className="w-full mt-2 bg-brand-cyan/10 border border-brand-cyan text-brand-cyan font-bold py-2 rounded text-xs uppercase tracking-wider hover:bg-brand-cyan hover:text-black transition-colors disabled:opacity-50 disabled:cursor-wait"
-                                >
-                                    {isGeneratingImage ? 'Processing Schematics...' : 'Generate Technical Diagram'}
-                                </button>
-                                {imageError && <p className="text-xs text-red-500 mt-2 text-center">{imageError}</p>}
-                            </div>
-                        </div>
-                    );
-                })()}
-
-                <div className="bg-black p-5 rounded-lg border border-gray-800 shadow-lg">
-                    <h2 className="text-sm font-bold border-b border-gray-800 pb-2 mb-3 font-display uppercase tracking-widest text-white">Remote Expert</h2>
-                    <div className="flex items-center justify-between mb-4">
-                        <span className="text-xs text-gray-500 uppercase">Uplink Status</span>
-                        <div className="flex items-center gap-2">
-                            <div className={`w-1.5 h-1.5 rounded-full ${isRemoteSessionActive ? 'bg-green-500 animate-pulse' : 'bg-red-900'}`}></div>
-                            <span className={`text-xs font-bold ${isRemoteSessionActive ? 'text-green-500' : 'text-gray-600'}`}>
-                                {isRemoteSessionActive ? 'LIVE' : 'OFFLINE'}
-                            </span>
+            {/* --- UI LAYER (Interactive Elements) --- */}
+            <div className="relative z-10 w-full h-full flex flex-col justify-between pointer-events-none p-6">
+                
+                {/* Top HUD Bar */}
+                <div className="flex justify-between items-start pointer-events-auto">
+                    <div className="bg-black/60 backdrop-blur-md border border-white/10 p-4 rounded-lg shadow-lg">
+                        <h1 className="text-brand-cyan font-display font-bold text-xl uppercase tracking-widest flex items-center gap-3">
+                            <div className="w-3 h-3 bg-brand-cyan animate-pulse shadow-[0_0_10px_#00F0FF]"></div>
+                            AR Inspector
+                        </h1>
+                        <div className="flex gap-4 mt-2 text-[10px] font-mono text-gray-400">
+                            <span>GPS: <span className="text-white">LOCKED</span></span>
+                            <span>VISION: <span className="text-white">ACTIVE</span></span>
+                            <span>OBJ: <span className="text-brand-cyan">{AR_NODES.length}</span></span>
                         </div>
                     </div>
+
+                    {/* Mode Toggle */}
                     <button 
-                        onClick={() => setIsRemoteSessionActive(prev => !prev)}
-                        className={`w-full font-bold py-2 rounded text-xs uppercase tracking-wider transition-colors border ${isRemoteSessionActive ? 'bg-red-900/20 border-red-800 text-red-500 hover:bg-red-900/40' : 'bg-green-900/20 border-green-800 text-green-500 hover:bg-green-900/40'}`}
+                        onClick={() => { setActiveNodeId(null); setIsScanning(true); }}
+                        className={`px-6 py-2 rounded border font-bold uppercase text-xs tracking-wider transition-all ${isScanning ? 'bg-brand-cyan text-black border-brand-cyan' : 'bg-black/60 text-gray-400 border-gray-700 hover:border-white'}`}
                     >
-                        {isRemoteSessionActive ? 'Terminate Uplink' : 'Request Technician'}
+                        {isScanning ? 'Scanning...' : 'Reset View'}
                     </button>
                 </div>
+
+                {/* Center Focus Reticle (Decoration) */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border border-white/10 rounded-full pointer-events-none flex items-center justify-center">
+                    <div className="w-60 h-60 border border-white/5 rounded-full border-dashed animate-[spin_20s_linear_infinite]"></div>
+                    <div className="w-1 h-4 bg-brand-cyan/50 absolute top-0"></div>
+                    <div className="w-1 h-4 bg-brand-cyan/50 absolute bottom-0"></div>
+                    <div className="w-4 h-1 bg-brand-cyan/50 absolute left-0"></div>
+                    <div className="w-4 h-1 bg-brand-cyan/50 absolute right-0"></div>
+                </div>
+
+                {/* Bottom/Right Inspector Panel */}
+                <div className="flex items-end justify-end h-full pointer-events-none">
+                    {activeNode && (
+                        <div className="w-full max-w-md pointer-events-auto animate-in slide-in-from-right duration-500">
+                            {/* Detail Card */}
+                            <div className="bg-[#0a0a0a]/90 backdrop-blur-xl border-l-2 border-brand-cyan p-6 shadow-2xl relative overflow-hidden group">
+                                {/* Tech Background */}
+                                <div className="absolute inset-0 opacity-10 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.1)_25%,rgba(255,255,255,0.1)_50%,transparent_50%,transparent_75%,rgba(255,255,255,0.1)_75%,rgba(255,255,255,0.1))] bg-[length:4px_4px]"></div>
+                                
+                                <div className="relative z-10">
+                                    <div className="flex justify-between items-start mb-4 border-b border-gray-800 pb-2">
+                                        <div>
+                                            <h2 className="text-2xl font-display font-black text-white uppercase italic tracking-wider">{activeNode.label}</h2>
+                                            <p className="text-[10px] font-mono text-brand-cyan uppercase tracking-widest">ID: {activeNode.id.toUpperCase()}_SYS_01</p>
+                                        </div>
+                                        <div className="text-right">
+                                             <div className="text-4xl font-mono font-bold text-white leading-none">
+                                                 {latestData[activeNode.dataKey!] !== undefined 
+                                                    ? (latestData[activeNode.dataKey!] as number).toFixed(activeNode.dataKey === 'rpm' ? 0 : 1)
+                                                    : '--'}
+                                             </div>
+                                             <div className="text-xs text-gray-500 font-bold uppercase">{activeNode.unit}</div>
+                                        </div>
+                                    </div>
+
+                                    <p className="text-sm text-gray-300 mb-6 leading-relaxed">{activeNode.description}</p>
+
+                                    {/* Live Sparkline */}
+                                    <div className="h-24 bg-black/50 border border-gray-800 rounded mb-4 relative p-2">
+                                        <div className="absolute top-2 left-2 text-[9px] text-gray-500 uppercase">Live Telemetry</div>
+                                        <Sparkline data={historyData} width={300} height={80} color="#00F0FF" />
+                                    </div>
+                                    
+                                    {/* Action Buttons */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button className="bg-white/5 hover:bg-white/10 border border-gray-700 text-white py-3 text-xs font-bold uppercase tracking-wider rounded transition-colors">
+                                            Diag Check
+                                        </button>
+                                        <button 
+                                            onClick={handleGenerateSchematic}
+                                            disabled={isGenerating}
+                                            className="bg-brand-cyan/10 hover:bg-brand-cyan hover:text-black border border-brand-cyan text-brand-cyan py-3 text-xs font-bold uppercase tracking-wider rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        >
+                                            {isGenerating ? (
+                                                <>
+                                                   <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                                                   Generating...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+                                                    Schematic
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {generatedImageUrl && (
-                <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200" onClick={() => setGeneratedImageUrl(null)}>
-                    <div className="w-full max-w-2xl bg-[#0a0a0a] rounded border border-brand-cyan shadow-[0_0_50px_rgba(0,240,255,0.2)] relative p-1" onClick={(e) => e.stopPropagation()}>
-                        <div className="bg-[#050505] p-2 border-b border-gray-800 flex justify-between items-center mb-1">
-                             <span className="text-[10px] font-mono text-brand-cyan uppercase">Schematic View // Generated by Gemini</span>
-                             <button onClick={() => setGeneratedImageUrl(null)} className="text-gray-500 hover:text-white">&times;</button>
-                        </div>
-                        <div className="bg-black overflow-hidden relative">
-                             {/* Blueprint Grid Overlay */}
-                             <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
-                             <img src={generatedImageUrl} alt="Generated component diagram" className="w-full h-auto object-contain max-h-[70vh]" />
-                        </div>
+            {/* --- MODALS --- */}
+            {generatedImage && (
+                <div 
+                    className="absolute inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-8 animate-in fade-in duration-300"
+                    onClick={() => setGeneratedImage(null)}
+                >
+                    <div className="relative max-w-4xl max-h-full bg-[#111] border border-gray-700 rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden" onClick={e => e.stopPropagation()}>
+                         <div className="absolute top-0 left-0 right-0 p-4 bg-black/80 border-b border-gray-800 flex justify-between items-center z-10">
+                             <h3 className="text-white font-mono text-sm uppercase">Generative Schematic // {activeNode?.label}</h3>
+                             <button onClick={() => setGeneratedImage(null)} className="text-gray-500 hover:text-white">&times;</button>
+                         </div>
+                         <img src={generatedImage} alt="Generated Schematic" className="max-w-full max-h-[80vh] object-contain" />
+                         <div className="absolute bottom-4 right-4 flex items-center gap-2 bg-black/60 px-3 py-1 rounded-full border border-white/10">
+                             <div className="w-2 h-2 bg-brand-cyan rounded-full"></div>
+                             <span className="text-[10px] text-gray-300 uppercase">AI Generated</span>
+                         </div>
                     </div>
                 </div>
             )}
+            
+            {/* Scanning Overlay (when no node selected) */}
+            {isScanning && (
+                <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center">
+                    <div className="text-center">
+                         <div className="inline-block px-4 py-1 bg-brand-cyan/10 border border-brand-cyan/50 text-brand-cyan text-xs font-mono mb-2 animate-pulse">
+                             SYSTEM SCANNING...
+                         </div>
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 };

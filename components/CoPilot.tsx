@@ -19,38 +19,63 @@ interface CoPilotProps {
   activeAlerts: DiagnosticAlert[];
 }
 
+const AudioVisualizer: React.FC<{ active: boolean, color: string }> = ({ active, color }) => (
+  <div className={`flex items-center gap-1 h-8 ${active ? '' : 'opacity-0'} transition-opacity duration-300`}>
+    {[...Array(5)].map((_, i) => (
+      <div 
+        key={i}
+        className={`w-1 bg-current rounded-full transition-all duration-75 ${color}`}
+        style={{ 
+          height: active ? `${Math.random() * 100}%` : '20%',
+          animation: active ? `pulse 0.5s infinite ${i * 0.1}s` : 'none'
+        }}
+      ></div>
+    ))}
+  </div>
+);
+
 const CoPilot: React.FC<CoPilotProps> = ({ latestVehicleData, activeAlerts }) => {
   const [state, setState] = useState<CoPilotState>(CoPilotState.Idle);
   const [userTranscript, setUserTranscript] = useState('');
   const [aiResponse, setAiResponse] = useState('');
   const [isOpen, setIsOpen] = useState(false);
-  const [handsFreeMode, setHandsFreeMode] = useState(false); // New: Keeps listening loop active
+  const [handsFreeMode, setHandsFreeMode] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
   const { speak, isSpeaking, cancel } = useTextToSpeech();
+  
+  // Use ref to track mount state to prevent updates on unmount
+  const isMounted = useRef(true);
+  useEffect(() => { return () => { isMounted.current = false; }; }, []);
 
-  // Handle the action returned by Gemini 3 Pro
+  // Handle the action returned by Gemini
   const handleAiAction = useCallback((actionData: { action: string, payload?: string, textToSpeak: string }) => {
+    if (!isMounted.current) return;
+    
     setAiResponse(actionData.textToSpeak);
     setState(CoPilotState.Speaking);
 
     // Execute Navigation if requested
     if (actionData.action === 'NAVIGATE' && actionData.payload) {
-        console.log(`Co-Pilot navigating to: ${actionData.payload}`);
         navigate(actionData.payload);
     }
 
-    // Speak the response, then restart listening if in hands-free mode
+    // Speak the response
     speak(actionData.textToSpeak, () => {
+        if (!isMounted.current) return;
+        
         if (handsFreeMode) {
-             // Small delay to prevent picking up its own echo or system noise
+             // Delay to prevent self-triggering
              setTimeout(() => {
-                setState(CoPilotState.Listening);
-                // Trigger listening externally/implicitly via the effect below
-             }, 500);
+                if (isMounted.current && handsFreeMode) {
+                    setState(CoPilotState.Listening);
+                }
+             }, 800);
         } else {
             setState(CoPilotState.Idle);
+            // Auto-close after short delay if not hands-free
+            setTimeout(() => setIsOpen(false), 3000);
         }
     });
   }, [navigate, speak, handsFreeMode]);
@@ -58,7 +83,6 @@ const CoPilot: React.FC<CoPilotProps> = ({ latestVehicleData, activeAlerts }) =>
   const processCommand = useCallback(async (command: string) => {
     if (!command.trim()) {
         if (handsFreeMode) {
-            // Nothing heard, keep listening
              setState(CoPilotState.Listening);
         } else {
              setState(CoPilotState.Idle);
@@ -70,7 +94,7 @@ const CoPilot: React.FC<CoPilotProps> = ({ latestVehicleData, activeAlerts }) =>
     setState(CoPilotState.Thinking);
     setAiResponse('');
     
-    // Use the Thinking Model (Gemini 3 Pro)
+    // Call Gemini Service
     const result = await interpretHandsFreeCommand(
         command, 
         location.pathname, 
@@ -86,18 +110,14 @@ const CoPilot: React.FC<CoPilotProps> = ({ latestVehicleData, activeAlerts }) =>
 
   }, [latestVehicleData, activeAlerts, location.pathname, handleAiAction, handsFreeMode]);
 
-  const { isListening, transcript, startListening, stopListening, hasSupport } = useSpeechRecognition(processCommand);
+  const { isListening, startListening, stopListening, hasSupport } = useSpeechRecognition(processCommand);
 
   // Sync internal state with hook state
   useEffect(() => {
     if (isListening) {
         setState(CoPilotState.Listening);
-    } else if (state === CoPilotState.Listening && !isListening) {
-         // Hook stopped listening (silence timeout), but we process what we have
-         // processCommand is called by hook onResult.
-         // If no result, we might need to manual restart if handsFree is on
     }
-  }, [isListening, state]);
+  }, [isListening]);
   
   // Hands-free loop manager
   useEffect(() => {
@@ -108,18 +128,16 @@ const CoPilot: React.FC<CoPilotProps> = ({ latestVehicleData, activeAlerts }) =>
 
   const toggleCoPilot = () => {
     if (!hasSupport) {
-        setIsOpen(true);
-        setState(CoPilotState.Idle);
-        setAiResponse("Sorry, browser not supported.");
+        alert("Speech Recognition is not supported in this browser.");
         return;
     }
       
-    if (state === CoPilotState.Idle) {
+    if (!isOpen) {
       setIsOpen(true);
-      setHandsFreeMode(true); // Activate loop
+      setHandsFreeMode(true);
+      setState(CoPilotState.Listening);
       startListening();
     } else {
-      // Stop everything
       setHandsFreeMode(false);
       stopListening();
       cancel(); 
@@ -128,68 +146,96 @@ const CoPilot: React.FC<CoPilotProps> = ({ latestVehicleData, activeAlerts }) =>
     }
   };
 
+  // Dynamic Styles based on state
+  const getStatusColor = () => {
+      switch (state) {
+          case CoPilotState.Listening: return 'text-red-500 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)]';
+          case CoPilotState.Thinking: return 'text-purple-400 border-purple-400 shadow-[0_0_15px_rgba(192,132,252,0.4)]';
+          case CoPilotState.Speaking: return 'text-brand-cyan border-brand-cyan shadow-[0_0_15px_rgba(0,240,255,0.4)]';
+          default: return 'text-gray-400 border-gray-600';
+      }
+  };
+
   const getStatusText = () => {
     switch (state) {
-      case CoPilotState.Listening:
-        return 'Listening...';
-      case CoPilotState.Thinking:
-        return `Thinking...`;
-      case CoPilotState.Speaking:
-        return 'Speaking...';
-      default:
-        return 'Co-Pilot Ready';
+      case CoPilotState.Listening: return 'LISTENING...';
+      case CoPilotState.Thinking: return 'ANALYZING...';
+      case CoPilotState.Speaking: return 'RESPONDING';
+      default: return 'STANDBY';
     }
   };
 
-  const fabColor = state === CoPilotState.Listening ? 'bg-red-600' : (state === CoPilotState.Thinking ? 'bg-purple-600' : 'bg-brand-cyan');
-  const ringColor = state === CoPilotState.Listening ? 'ring-red-600' : (state === CoPilotState.Thinking ? 'ring-purple-600' : 'ring-brand-cyan');
-
   return (
     <>
+      {/* Floating Activation Button (FAB) */}
       <button
         onClick={toggleCoPilot}
-        className={`fixed bottom-6 right-6 w-16 h-16 rounded-full text-black flex items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.5)] transition-all duration-300 z-50 ${fabColor} hover:scale-105`}
-        aria-label="Activate AI Co-Pilot"
+        className={`fixed bottom-6 right-6 w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 z-50 ${
+            isOpen ? 'bg-red-600 rotate-45' : 'bg-brand-cyan hover:scale-110 hover:shadow-[0_0_20px_var(--brand-glow)]'
+        } shadow-lg`}
+        aria-label="Toggle AI Co-Pilot"
       >
-        {state === CoPilotState.Idle && <MicrophoneIcon className="w-8 h-8" />}
-        {state === CoPilotState.Listening && <div className="w-8 h-8 rounded-full bg-white animate-pulse" />}
-        {state === CoPilotState.Thinking && <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin" />}
-        {state === CoPilotState.Speaking && (
-            <div className="flex gap-1 items-center justify-center h-4">
-                <div className="w-1 h-3 bg-white animate-[bounce_1s_infinite]"></div>
-                <div className="w-1 h-5 bg-white animate-[bounce_1s_infinite_0.1s]"></div>
-                <div className="w-1 h-3 bg-white animate-[bounce_1s_infinite_0.2s]"></div>
-            </div>
+        {isOpen ? (
+            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+        ) : (
+            <MicrophoneIcon className="w-6 h-6 text-black" />
         )}
       </button>
 
-      {isOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 flex items-center justify-center" onClick={() => toggleCoPilot()}>
-          <div className="w-full max-w-md text-center p-6" onClick={(e) => e.stopPropagation()}>
-            <div className={`relative inline-block p-4 border-4 ${ringColor} rounded-full mb-8 transition-colors duration-500`}>
-              <div className={`w-32 h-32 rounded-full ${fabColor} flex items-center justify-center transition-colors duration-500 shadow-[0_0_50px_rgba(0,0,0,0.5)]`}>
-                 {state === CoPilotState.Thinking ? (
-                     <div className="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
-                 ) : (
-                     <MicrophoneIcon className="w-16 h-16 text-black"/>
-                 )}
-              </div>
-              {state === CoPilotState.Listening && <div className={`absolute inset-0 rounded-full ring-4 ${ringColor} animate-ping opacity-50`}></div>}
+      {/* HUD Panel Overlay */}
+      <div 
+        className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-40 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+            isOpen ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'
+        }`}
+      >
+        <div className={`glass-panel bg-black/80 backdrop-blur-xl border p-6 rounded-2xl w-[90vw] max-w-lg flex flex-col items-center gap-4 ${getStatusColor()}`}>
+            
+            {/* Status Header */}
+            <div className="flex items-center justify-between w-full border-b border-white/10 pb-2">
+                <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${state === CoPilotState.Listening ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}></div>
+                    <span className="text-xs font-display font-bold tracking-widest uppercase">{getStatusText()}</span>
+                </div>
+                <div className="text-[10px] font-mono text-gray-500">KC-AI CORE v3.1</div>
             </div>
 
-            <h2 className="text-2xl font-display font-bold text-white mb-2">{getStatusText()}</h2>
-            {userTranscript && <p className="text-gray-400 italic mb-4">"{userTranscript}"</p>}
-            
-            <div className="min-h-[80px] flex items-center justify-center">
-                 <p className="text-xl text-brand-cyan font-medium leading-relaxed drop-shadow-lg">{aiResponse}</p>
+            {/* Main Interaction Area */}
+            <div className="flex flex-col items-center justify-center min-h-[80px] w-full text-center">
+                {state === CoPilotState.Listening && (
+                    <div className="text-xl font-light text-white italic">
+                        "Listening..."
+                    </div>
+                )}
+                
+                {state === CoPilotState.Thinking && (
+                    <div className="flex gap-1">
+                        <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce delay-75"></div>
+                        <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce delay-150"></div>
+                    </div>
+                )}
+
+                {state === CoPilotState.Speaking && (
+                    <p className="text-lg font-medium text-brand-cyan animate-in fade-in slide-in-from-bottom-2">
+                        {aiResponse}
+                    </p>
+                )}
             </div>
+
+            {/* User Transcript Display */}
+            {userTranscript && state !== CoPilotState.Listening && (
+                <div className="text-xs text-gray-500 font-mono border-t border-white/10 pt-2 w-full text-center">
+                    CMD: {userTranscript}
+                </div>
+            )}
             
-            <p className="text-xs text-gray-500 mt-8 uppercase tracking-widest">
-                {handsFreeMode ? 'Hands-Free Mode Active • Tap to Stop' : 'Tap mic to speak'}
-            </p>
-          </div>
+            {/* Visualizer Footer */}
+            <div className="h-6 w-full flex items-center justify-center">
+                 <AudioVisualizer active={state === CoPilotState.Speaking || state === CoPilotState.Listening} color={state === CoPilotState.Listening ? 'text-red-500' : 'text-brand-cyan'} />
+            </div>
+
         </div>
-      )}
+      </div>
     </>
   );
 };

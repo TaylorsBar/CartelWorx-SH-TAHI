@@ -19,6 +19,8 @@ export interface SensorDataPoint {
   engineLoad: number;
   // For Race Pack
   distance: number;
+  gForceX: number; // Lateral G
+  gForceY: number; // Longitudinal G
   // For GPS
   latitude: number;
   longitude: number;

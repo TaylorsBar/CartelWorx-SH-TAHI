@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import GaugeIcon from './icons/GaugeIcon';
 import ChatIcon from './icons/ChatIcon';
@@ -12,8 +12,10 @@ import HederaIcon from './icons/HederaIcon';
 import StopwatchIcon from './icons/StopwatchIcon';
 import PaintBrushIcon from './icons/PaintBrushIcon';
 import SoundWaveIcon from './icons/SoundWaveIcon';
-import { useVehicleData } from '../hooks/useVehicleData';
+import FullScreenIcon from './icons/FullScreenIcon';
+import { useVehicleConnection } from '../hooks/useVehicleData';
 import { ObdConnectionState } from '../types';
+import { KarapiroLogo } from './KarapiroLogo';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: GaugeIcon },
@@ -31,8 +33,25 @@ const navigation = [
 
 const Sidebar: React.FC = () => {
   const { pathname } = useLocation();
-  const { obdState, connectObd, disconnectObd } = useVehicleData();
+  const { obdState, connectObd, disconnectObd } = useVehicleConnection();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullScreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullScreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullScreenChange);
+  }, []);
+
+  const toggleFullScreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => console.error(err));
+    } else {
+      document.exitFullscreen().catch(err => console.error(err));
+    }
+  };
 
   const handleConnectionClick = () => {
     if (obdState === ObdConnectionState.Disconnected || obdState === ObdConnectionState.Error) {
@@ -86,26 +105,14 @@ const Sidebar: React.FC = () => {
           </button>
 
           {/* Brand Header */}
-          <div className={`flex items-center h-24 border-b border-white/10 bg-gradient-to-r from-brand-cyan/10 to-transparent transition-all duration-300 ${isCollapsed ? 'justify-center px-0' : 'px-6'}`}>
-            <div className="relative group flex-shrink-0">
-                <div className={`absolute -inset-1 bg-gradient-to-r from-brand-cyan to-brand-blue rounded-lg blur opacity-25 group-hover:opacity-75 transition duration-1000 group-hover:duration-200 ${isCollapsed ? 'opacity-0 group-hover:opacity-50' : ''}`}></div>
-                <div className="relative w-12 h-12 bg-black rounded-lg border border-brand-cyan/50 flex items-center justify-center overflow-hidden">
-                    <div className="absolute inset-0 opacity-50" style={{
-                        backgroundImage: `linear-gradient(45deg, #222 25%, transparent 25%, transparent 75%, #222 75%, #222), linear-gradient(45deg, #222 25%, transparent 25%, transparent 75%, #222 75%, #222)`,
-                        backgroundSize: '4px 4px',
-                        backgroundPosition: '0 0, 2px 2px'
-                    }}></div>
-                    <span className="font-display font-black text-brand-cyan text-xl italic tracking-tighter neon-text relative z-10">KC</span>
+          <div className={`flex items-center h-24 border-b border-white/10 transition-all duration-300 ${isCollapsed ? 'justify-center px-2' : 'justify-start px-6'}`}>
+            {isCollapsed ? (
+                <div className="w-10 h-10 bg-gradient-to-br from-gray-800 to-black rounded-full flex items-center justify-center border border-white/20 shadow-[0_0_15px_rgba(0,240,255,0.2)] group">
+                    <span className="font-display font-bold text-white text-xl group-hover:text-brand-cyan transition-colors">K</span>
                 </div>
-            </div>
-            
-            <div className={`ml-4 overflow-hidden transition-all duration-300 ${isCollapsed ? 'w-0 opacity-0 ml-0' : 'w-auto opacity-100'}`}>
-                <h1 className="text-lg font-display font-bold text-white tracking-widest uppercase neon-text whitespace-nowrap">Genesis</h1>
-                <div className="flex items-center">
-                    <div className="w-2 h-2 bg-brand-cyan rounded-full animate-pulse mr-2"></div>
-                    <p className="text-[0.6rem] text-brand-cyan tracking-[0.3em] uppercase font-bold whitespace-nowrap">Telemetry</p>
-                </div>
-            </div>
+            ) : (
+                <KarapiroLogo className="w-full h-16" />
+            )}
           </div>
 
           {/* Navigation Items */}
@@ -148,34 +155,48 @@ const Sidebar: React.FC = () => {
             })}
           </div>
           
-          {/* OBD Status Footer */}
+          {/* Footer: OBD Status & Fullscreen Toggle */}
           <div className={`border-t border-white/10 bg-black/40 backdrop-blur-md transition-all duration-300 ${isCollapsed ? 'p-2' : 'p-4'}`}>
-            <button
-                onClick={handleConnectionClick}
-                className={`w-full flex items-center rounded-xl bg-white/5 border border-white/10 hover:border-brand-cyan/50 hover:bg-white/10 transition-all group relative overflow-hidden ${isCollapsed ? 'justify-center py-3 px-0' : 'justify-between px-4 py-3'}`}
-                title={isCollapsed ? getConnectionLabel() : ''}
-            >
-                <div className="flex items-center z-10">
-                    <div className={`w-2 h-2 rounded-full transition-all duration-500 ${isCollapsed ? 'mr-0' : 'mr-3'} ${
-                        obdState === ObdConnectionState.Connected ? 'bg-brand-green shadow-[0_0_8px_#33FF33]' : 
-                        obdState === ObdConnectionState.Disconnected ? 'bg-gray-600' : 
-                        'bg-yellow-400 animate-pulse'
-                    }`}></div>
-                    <span className={`text-xs font-display font-bold uppercase tracking-wider transition-colors whitespace-nowrap ${getConnectionColor()} ${isCollapsed ? 'w-0 opacity-0 overflow-hidden hidden' : 'w-auto opacity-100'}`}>
-                        {getConnectionLabel()}
-                    </span>
-                </div>
-                <div className={`z-10 ${isCollapsed ? 'hidden' : 'block'}`}>
-                   <svg className={`w-4 h-4 text-gray-500 group-hover:text-brand-cyan transition-colors ${obdState === ObdConnectionState.Connecting ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        {obdState === ObdConnectionState.Connected 
-                            ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                        }
-                    </svg>
-                </div>
-                {/* Button Scanline */}
-                <div className="absolute inset-0 bg-gradient-to-t from-brand-cyan/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-            </button>
+            <div className={`flex gap-2 ${isCollapsed ? 'flex-col' : 'flex-row'}`}>
+                {/* OBD Button */}
+                <button
+                    onClick={handleConnectionClick}
+                    className={`flex-1 flex items-center rounded-xl bg-white/5 border border-white/10 hover:border-brand-cyan/50 hover:bg-white/10 transition-all group relative overflow-hidden ${isCollapsed ? 'justify-center py-3 px-0 w-full' : 'justify-between px-4 py-3'}`}
+                    title={isCollapsed ? getConnectionLabel() : ''}
+                >
+                    <div className="flex items-center z-10">
+                        <div className={`w-2 h-2 rounded-full transition-all duration-500 ${isCollapsed ? 'mr-0' : 'mr-3'} ${
+                            obdState === ObdConnectionState.Connected ? 'bg-brand-green shadow-[0_0_8px_#33FF33]' : 
+                            obdState === ObdConnectionState.Disconnected ? 'bg-gray-600' : 
+                            'bg-yellow-400 animate-pulse'
+                        }`}></div>
+                        <span className={`text-xs font-display font-bold uppercase tracking-wider transition-colors whitespace-nowrap ${getConnectionColor()} ${isCollapsed ? 'w-0 opacity-0 overflow-hidden hidden' : 'w-auto opacity-100'}`}>
+                            {getConnectionLabel()}
+                        </span>
+                    </div>
+                    <div className={`z-10 ${isCollapsed ? 'hidden' : 'block'}`}>
+                        <svg className={`w-4 h-4 text-gray-500 group-hover:text-brand-cyan transition-colors ${obdState === ObdConnectionState.Connecting ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                {obdState === ObdConnectionState.Connected 
+                                    ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                    : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                                }
+                        </svg>
+                    </div>
+                    {/* Button Scanline */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-brand-cyan/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                </button>
+
+                {/* Fullscreen Toggle */}
+                <button
+                    onClick={toggleFullScreen}
+                    className={`flex-shrink-0 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 hover:border-brand-cyan/50 hover:bg-white/10 transition-all group relative overflow-hidden ${isCollapsed ? 'w-full py-3' : 'w-12'}`}
+                    title={isFullscreen ? "Exit Full Screen" : "Full Screen"}
+                >
+                    <FullScreenIcon isFullscreen={isFullscreen} className="w-5 h-5 text-gray-500 group-hover:text-brand-cyan transition-colors z-10" />
+                     {/* Button Scanline */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-brand-cyan/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                </button>
+            </div>
           </div>
        </div>
     </div>
