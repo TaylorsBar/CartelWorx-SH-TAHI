@@ -14,11 +14,11 @@
 }
 </script>
 <!DOCTYPE html>
-<html lang="en" data-palette="cyan" data-material="glass">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Karapiro Cartel Speed Shop</title>
+    <title>Karapiro Cartel | Genesis OS</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script>
@@ -26,29 +26,23 @@
         theme: {
           extend: {
             colors: {
-              'brand-cyan': 'var(--brand-primary)',
-              'brand-blue': 'var(--brand-secondary)',
-              'brand-pink': '#FF00CC',
-              'brand-red': '#FF3333',
-              'brand-green': '#33FF33',
-              'base-900': '#050508',
-              'base-800': '#0f1014',
-              'base-700': '#1a1b21',
+              'brand-cyan': '#00F0FF',
+              'brand-blue': '#0099FF',
+              'brand-purple': '#BC13FE',
+              'brand-red': '#FF003C',
+              'brand-yellow': '#FCEE0A',
+              'surface-dark': '#050505',
+              'surface-panel': '#0A0A0A',
+              'surface-border': '#1F1F1F',
             },
             fontFamily: {
-              'sans': ['Inter', 'sans-serif'],
-              'mono': ['Roboto Mono', 'monospace'],
+              'sans': ['Inter', 'system-ui', 'sans-serif'],
+              'mono': ['JetBrains Mono', 'Roboto Mono', 'monospace'],
               'display': ['Orbitron', 'sans-serif'],
             },
-            boxShadow: {
-              'glow-cyan': '0 0 15px var(--brand-glow), 0 0 30px var(--brand-glow-dim)',
-              'glow-blue': '0 0 15px rgba(0, 153, 255, 0.3), 0 0 30px rgba(0, 153, 255, 0.1)',
-              'glow-red': '0 0 15px rgba(255, 51, 51, 0.3), 0 0 30px rgba(255, 51, 51, 0.1)',
-              'glass-edge': 'inset 0 0 0 1px rgba(255,255,255,0.1), 0 10px 20px rgba(0,0,0,0.5)',
-              'glow-theme': '0 0 15px var(--theme-ambient-glow-color, transparent)',
-            },
             backgroundImage: {
-              'glass-gradient': 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%)',
+              'carbon': "url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAIklEQVQIW2NkQAKrVq36zwjjgzj//v37zwjjgzhhYWGMYAIAdZkKwz/CXYoAAAAASUVORK5CYII=')",
+              'mesh': "radial-gradient(#1a1a1a 1px, transparent 1px)"
             }
           },
         },
@@ -56,161 +50,75 @@
     </script>
     <style>
       :root {
-        /* High-Fidelity Carbon Fiber Simulation */
-        --carbon-fiber-weave: 
-          linear-gradient(27deg, #151515 5px, transparent 5px) 0 5px,
-          linear-gradient(207deg, #151515 5px, transparent 5px) 10px 0px,
-          linear-gradient(27deg, #222 5px, transparent 5px) 0px 10px,
-          linear-gradient(207deg, #222 5px, transparent 5px) 10px 5px,
-          linear-gradient(90deg, #1b1b1b 10px, transparent 10px);
-        
-        --carbon-base: 
-          linear-gradient(#1d1d1d 25%, #1a1a1a 25%, #1a1a1a 50%, transparent 50%, transparent 75%, #242424 75%, #242424);
-
-        --cockpit-vignette: radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.95) 100%);
-
-        /* Default Palette (Cyan) */
-        --brand-primary: #00F0FF;
-        --brand-secondary: #0099FF;
-        --brand-glow: rgba(0, 240, 255, 0.5);
-        --brand-glow-dim: rgba(0, 240, 255, 0.2);
-
-        /* Default Material (Glass) */
-        --glass-bg: rgba(10, 12, 16, 0.65);
+        --glass-bg: rgba(10, 10, 12, 0.75);
         --glass-border: rgba(255, 255, 255, 0.08);
-        --glass-blur: 20px;
-        --glass-texture: none;
+        --neon-cyan: #00F0FF;
+        --neon-red: #FF003C;
+        --neon-glow: 0 0 10px rgba(0, 240, 255, 0.5);
       }
 
-      /* Color Palettes */
-      [data-palette="red"] {
-        --brand-primary: #FF3333;
-        --brand-secondary: #CC0000;
-        --brand-glow: rgba(255, 51, 51, 0.5);
-        --brand-glow-dim: rgba(255, 51, 51, 0.2);
-      }
-      [data-palette="green"] {
-        --brand-primary: #33FF33;
-        --brand-secondary: #00CC00;
-        --brand-glow: rgba(51, 255, 51, 0.5);
-        --brand-glow-dim: rgba(51, 255, 51, 0.2);
-      }
-      [data-palette="purple"] {
-        --brand-primary: #CC00FF;
-        --brand-secondary: #9900CC;
-        --brand-glow: rgba(204, 0, 255, 0.5);
-        --brand-glow-dim: rgba(204, 0, 255, 0.2);
-      }
-      [data-palette="amber"] {
-        --brand-primary: #FFCC00;
-        --brand-secondary: #FF9900;
-        --brand-glow: rgba(255, 204, 0, 0.5);
-        --brand-glow-dim: rgba(255, 204, 0, 0.2);
-      }
-
-      /* Materials */
-      [data-material="matte"] {
-        --glass-bg: rgba(15, 15, 17, 0.95);
-        --glass-border: rgba(60, 60, 60, 0.8);
-        --glass-blur: 0px;
-      }
-      [data-material="brushed-metal"] {
-        --glass-bg: rgba(30, 32, 38, 0.85);
-        --glass-border: rgba(255, 255, 255, 0.15);
-        --glass-blur: 10px;
-        --glass-texture: repeating-linear-gradient(90deg, transparent, transparent 1px, rgba(255,255,255,0.02) 1px, rgba(255,255,255,0.02) 2px);
-      }
-      [data-material="carbon"] {
-        --glass-bg: rgba(5, 5, 5, 0.85);
-        --glass-border: rgba(255, 255, 255, 0.1);
-        --glass-blur: 5px;
-        --glass-texture: 
-          linear-gradient(27deg, #151515 2px, transparent 2px) 0 2px,
-          linear-gradient(207deg, #151515 2px, transparent 2px) 4px 0px,
-          linear-gradient(27deg, #222 2px, transparent 2px) 0px 4px,
-          linear-gradient(207deg, #222 2px, transparent 2px) 4px 2px;
-      }
-      
       body {
-        background-color: #111;
-        /* Layered backgrounds: Vignette -> Weave -> Base Color */
-        background-image: var(--cockpit-vignette), var(--carbon-fiber-weave), var(--carbon-base);
-        background-size: 100% 100%, 20px 20px, 20px 20px;
-        background-attachment: fixed;
+        background-color: #050505;
+        color: #e0e0e0;
         font-family: 'Inter', sans-serif;
-        color: #FFFFFF;
-        overflow: hidden; /* App handles scroll */
+        overflow: hidden; /* App manages scroll */
+        -webkit-font-smoothing: antialiased;
       }
 
-      /* Premium Glass Panel Utility */
-      .glass-panel {
-        background: var(--glass-bg);
-        backdrop-filter: blur(var(--glass-blur));
-        -webkit-backdrop-filter: blur(var(--glass-blur));
-        border: 1px solid var(--glass-border);
-        border-top: 1px solid rgba(255, 255, 255, 0.15); /* Highlight top edge */
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
-      }
-      
-      /* Only apply texture overlay if defined and not none */
-      .glass-panel::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background-image: var(--glass-texture);
-        background-size: 8px 8px; /* For carbon material */
-        opacity: 0.3;
-        pointer-events: none;
-        z-index: -1;
-      }
-      
-      [data-material="brushed-metal"] .glass-panel::before {
-         background-size: 100% 100%; /* Brushed metal needs full cover */
-      }
-
-      /* Neon Text Effect */
-      .neon-text {
-        text-shadow: 0 0 5px var(--brand-glow), 0 0 10px var(--brand-glow-dim);
-      }
-      
-      .neon-text-green {
-        text-shadow: 0 0 5px rgba(51, 255, 51, 0.5), 0 0 10px rgba(51, 255, 51, 0.3);
-      }
-
-      .neon-text-red {
-        text-shadow: 0 0 5px rgba(255, 51, 51, 0.5), 0 0 10px rgba(255, 51, 51, 0.3);
-      }
-
-      /* Next-Gen Custom Scrollbar */
+      /* Custom Scrollbar for "Technical" feel */
       .custom-scrollbar::-webkit-scrollbar {
         width: 6px;
         height: 6px;
       }
       .custom-scrollbar::-webkit-scrollbar-track {
-        background: rgba(0, 0, 0, 0.2);
-        border-radius: 3px;
+        background: #0a0a0a; 
       }
       .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.15); /* Neutral for compatibility */
+        background: #333; 
         border-radius: 3px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 0 6px var(--brand-glow-dim);
       }
       .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-        background: var(--brand-glow);
-        box-shadow: 0 0 10px var(--brand-glow);
-      }
-      .custom-scrollbar::-webkit-scrollbar-corner {
-        background: transparent;
+        background: var(--neon-cyan); 
       }
 
+      /* Utilities */
+      .glass-panel {
+        background: var(--glass-bg);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid var(--glass-border);
+      }
+
+      .neon-text {
+        text-shadow: 0 0 5px rgba(0, 240, 255, 0.6);
+      }
+      
+      .scanline {
+        background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+        background-size: 100% 4px;
+        pointer-events: none;
+      }
+
+      /* Keyframes for Neural Orb */
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      @keyframes ping {
+        75%, 100% { transform: scale(2); opacity: 0; }
+      }
+      @keyframes pulse {
+        50% { opacity: .5; }
+      }
+      @keyframes bounce {
+        0%, 100% { transform: translateY(-25%); animation-timing-function: cubic-bezier(0.8,0,1,1); }
+        50% { transform: none; animation-timing-function: cubic-bezier(0,0,0.2,1); }
+      }
     </style>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@400;500;700;900&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   </head>
   <body>
-    <div id="root" class="h-screen w-screen"></div>
+    <div id="root" class="h-screen w-screen flex flex-col"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>

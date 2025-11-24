@@ -1,46 +1,135 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { useVehicleTelemetry } from '../hooks/useVehicleData';
+import { useVehicleStore } from '../stores/vehicleStore';
 import GForceMeter from './widgets/GForceMeter';
+import { TrackedPoint } from '../services/OpticalFlowProcessor';
 
 const RaceCam: React.FC = () => {
     const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const overlayRef = useRef<HTMLCanvasElement>(null);
+    
     const [streamActive, setStreamActive] = useState(false);
-    const { latestData } = useVehicleTelemetry(); 
+    const latestData = useVehicleStore(state => state.latestData);
+    const processVisionFrame = useVehicleStore(state => state.processVisionFrame);
     const d = latestData;
+
+    // Vision Processing Loop
+    useEffect(() => {
+        let animationFrameId: number;
+        let lastProcess = 0;
+
+        const loop = (time: number) => {
+            if (videoRef.current && canvasRef.current && streamActive && !videoRef.current.paused) {
+                
+                // Limit processing rate to ~15-20 FPS for performance
+                if (time - lastProcess > 50) { 
+                    lastProcess = time;
+                    
+                    const video = videoRef.current;
+                    const canvas = canvasRef.current;
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    
+                    if (ctx && video.videoWidth > 0) {
+                        // 1. Downscale for processing (320x240 is sufficient for flow)
+                        const width = 320;
+                        const height = 240;
+                        
+                        if (canvas.width !== width) canvas.width = width;
+                        if (canvas.height !== height) canvas.height = height;
+                        
+                        ctx.drawImage(video, 0, 0, width, height);
+                        const imageData = ctx.getImageData(0, 0, width, height);
+                        
+                        // 2. Send to Vision System
+                        const result = processVisionFrame(imageData);
+                        
+                        // 3. Render Overlay (Points)
+                        if (overlayRef.current && result.features) {
+                            renderOverlay(overlayRef.current, result.features, width, height);
+                        }
+                    }
+                }
+            }
+            animationFrameId = requestAnimationFrame(loop);
+        };
+
+        if (streamActive) {
+            animationFrameId = requestAnimationFrame(loop);
+        }
+
+        return () => cancelAnimationFrame(animationFrameId);
+    }, [streamActive, processVisionFrame]);
+
+    const renderOverlay = (canvas: HTMLCanvasElement, points: TrackedPoint[], procW: number, procH: number) => {
+        const ctx = canvas.getContext('2d');
+        if (!ctx || !videoRef.current) return;
+        
+        // Match overlay size to display size
+        if (canvas.width !== videoRef.current.clientWidth || canvas.height !== videoRef.current.clientHeight) {
+            canvas.width = videoRef.current.clientWidth;
+            canvas.height = videoRef.current.clientHeight;
+        }
+
+        const scaleX = canvas.width / procW;
+        const scaleY = canvas.height / procH;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw Features
+        ctx.strokeStyle = '#00F0FF';
+        ctx.fillStyle = '#00F0FF';
+        ctx.lineWidth = 2;
+
+        points.forEach(p => {
+            const x = p.x * scaleX;
+            const y = p.y * scaleY;
+            
+            // Crosshair
+            ctx.beginPath();
+            ctx.moveTo(x - 5, y);
+            ctx.lineTo(x + 5, y);
+            ctx.moveTo(x, y - 5);
+            ctx.lineTo(x, y + 5);
+            ctx.stroke();
+            
+            // ID Label (optional, messy with many points)
+            // ctx.fillText(p.id.toString(), x + 5, y - 5);
+        });
+        
+        // Draw HUD Text
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(10, 10, 160, 25);
+        ctx.fillStyle = '#00F0FF';
+        ctx.font = '12px monospace';
+        ctx.fillText(`TRACKING: ${points.length} PTS`, 20, 27);
+    };
 
     useEffect(() => {
         let localStream: MediaStream | null = null;
 
         const startCamera = async () => {
             try {
-                // First attempt: Ideal constraints for a "dashcam" feel (Environment/Rear camera, HD)
                 try {
                     localStream = await navigator.mediaDevices.getUserMedia({ 
                         video: { 
-                            width: { ideal: 1920 },
-                            height: { ideal: 1080 },
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 },
                             facingMode: "environment" 
                         }, 
                         audio: false 
                     });
                 } catch (primaryErr) {
                     console.warn("Primary camera config failed, trying fallback...", primaryErr);
-                    // Fallback: Any available video device
-                    localStream = await navigator.mediaDevices.getUserMedia({ 
-                        video: true, 
-                        audio: false 
-                    });
+                    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
                 }
                 
                 if (videoRef.current && localStream) {
                     videoRef.current.srcObject = localStream;
-                    // Explicitly call play() to ensure it starts, handling the promise to catch autoplay blocks
                     videoRef.current.play().then(() => {
                         setStreamActive(true);
                     }).catch(playErr => {
                         console.error("Video play failed:", playErr);
-                        // Still set active to try showing it, user might need to interact
                         setStreamActive(true);
                     });
                 }
@@ -63,34 +152,37 @@ const RaceCam: React.FC = () => {
     const rpmPercent = Math.min(100, Math.max(0, (d.rpm / 8000) * 100));
     const isRedline = d.rpm > 7000;
 
-    // Simulated Pedal Inputs (derived from load/g-force for visual effect if not in data)
     const throttlePct = d.engineLoad;
     const brakePct = d.gForceY < -0.2 ? Math.min(100, Math.abs(d.gForceY) * 80) : 0;
 
     return (
         <div className="relative w-full h-full bg-black overflow-hidden flex items-center justify-center">
             
-            {/* 1. Video Layer - Always render to ensure ref availability */}
+            {/* 1. Video Layer */}
             <video 
                 ref={videoRef} 
                 autoPlay 
                 playsInline 
                 muted 
-                onLoadedMetadata={() => {
-                    if (videoRef.current && videoRef.current.paused) {
-                        videoRef.current.play().catch(e => console.warn("Autoplay blocked", e));
-                    }
-                }}
                 className={`absolute inset-0 w-full h-full object-cover z-0 transition-opacity duration-500 ${streamActive ? 'opacity-100' : 'opacity-0'}`}
             />
+            
+            {/* Hidden Processing Canvas */}
+            <canvas ref={canvasRef} className="hidden" />
+            
+            {/* AR Overlay Canvas */}
+            <canvas 
+                ref={overlayRef} 
+                className="absolute inset-0 w-full h-full z-1 pointer-events-none"
+            />
 
-            {/* Fallback Background - Visible when stream not active */}
+            {/* Fallback Background */}
             {!streamActive && (
                 <div className="absolute inset-0 w-full h-full object-cover z-0 bg-[url('https://images.unsplash.com/photo-1542228776-6c70b6d21397?q=80&w=2670&auto=format&fit=crop')] bg-cover bg-center grayscale-[30%]">
                     <div className="absolute inset-0 bg-black/20"></div>
                     <div className="absolute inset-0 flex items-center justify-center">
                         <div className="bg-black/60 backdrop-blur px-4 py-2 rounded border border-white/10 text-xs text-gray-400 font-mono">
-                            INITIALIZING CAMERA FEED...
+                            INITIALIZING OPTICAL SENSORS...
                         </div>
                     </div>
                 </div>

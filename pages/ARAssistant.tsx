@@ -106,6 +106,10 @@ const ARAssistant: React.FC = () => {
     const [isGenerating, setIsGenerating] = useState(false);
     const [generatedImage, setGeneratedImage] = useState<string | null>(null);
 
+    // Video Stream State
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const [streamActive, setStreamActive] = useState(false);
+
     // Derived State
     const activeNode = useMemo(() => AR_NODES.find(n => n.id === activeNodeId), [activeNodeId]);
     
@@ -114,6 +118,35 @@ const ARAssistant: React.FC = () => {
         if (!activeNode || !activeNode.dataKey) return [];
         return data.slice(-50).map(d => d[activeNode.dataKey!] as number);
     }, [data, activeNode]);
+
+    useEffect(() => {
+        let localStream: MediaStream | null = null;
+        const startCamera = async () => {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'environment' }, 
+                    audio: false 
+                });
+                
+                if (videoRef.current) {
+                    videoRef.current.srcObject = localStream;
+                    await videoRef.current.play();
+                    setStreamActive(true);
+                }
+            } catch (err) {
+                console.error("AR Camera Access Failed:", err);
+                setStreamActive(false);
+            }
+        };
+
+        startCamera();
+
+        return () => {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, []);
 
     // Handle Node Click
     const handleNodeClick = (id: string) => {
@@ -140,9 +173,18 @@ const ARAssistant: React.FC = () => {
         <div className="relative h-full w-full bg-black overflow-hidden flex">
             
             {/* --- AR VIEWPORT (Full Screen Layer) --- */}
-            <div className="absolute inset-0 z-0">
-                {/* Engine Wireframe Background */}
-                <div className="absolute inset-0 flex items-center justify-center bg-[#050505]">
+            <div className="absolute inset-0 z-0 bg-black">
+                {/* Live Video Feed */}
+                 <video 
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${streamActive ? 'opacity-100' : 'opacity-0'}`}
+                />
+
+                {/* Engine Wireframe Background (Fallback) */}
+                <div className={`absolute inset-0 flex items-center justify-center bg-[#050505] transition-opacity duration-700 ${streamActive ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(0,40,60,0.4)_0%,_rgba(0,0,0,0.9)_100%)]"></div>
                      <img 
                         src="https://storage.googleapis.com/fpl-assets/ar-engine-wireframe.svg" 
@@ -150,6 +192,7 @@ const ARAssistant: React.FC = () => {
                         className="w-full h-full object-cover opacity-40 mix-blend-screen"
                         style={{ filter: 'contrast(1.2) brightness(0.8)' }}
                      />
+                     {!streamActive && <div className="absolute font-mono text-brand-cyan text-xs animate-pulse">INITIALIZING OPTICAL SENSORS...</div>}
                 </div>
 
                 {/* SVG Overlay Layer for HUD Lines & Nodes */}
@@ -237,7 +280,7 @@ const ARAssistant: React.FC = () => {
                         </h1>
                         <div className="flex gap-4 mt-2 text-[10px] font-mono text-gray-400">
                             <span>GPS: <span className="text-white">LOCKED</span></span>
-                            <span>VISION: <span className="text-white">ACTIVE</span></span>
+                            <span>VISION: <span className={streamActive ? "text-green-500" : "text-yellow-500"}>{streamActive ? "ACTIVE" : "NO SIGNAL"}</span></span>
                             <span>OBJ: <span className="text-brand-cyan">{AR_NODES.length}</span></span>
                         </div>
                     </div>

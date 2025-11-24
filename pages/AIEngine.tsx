@@ -4,25 +4,23 @@ import RiskTimeline from '../components/RiskTimeline';
 import { useVehicleData } from '../hooks/useVehicleData';
 import { getPredictiveAnalysis } from '../services/geminiService';
 import { MOCK_LOGS } from './MaintenanceLog'; // Use mock logs for context
-import { TimelineEvent } from '../types';
+import { TimelineEvent, ObdConnectionState } from '../types';
 
 const AIEngine: React.FC = () => {
-    const [isConnecting, setIsConnecting] = useState(false);
-    const [isConnected, setIsConnected] = useState(false);
+    // Access global vehicle connection state and logic
+    const { latestData, obdState, connectObd, disconnectObd } = useVehicleData();
+    
+    // Map global state to component state flags
+    const isConnected = obdState === ObdConnectionState.Connected;
+    const isConnecting = obdState === ObdConnectionState.Connecting || obdState === ObdConnectionState.Initializing;
+    
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
     const [error, setError] = useState<string | null>(null);
 
-    const { latestData } = useVehicleData();
-
     const handleConnect = () => {
-        setIsConnecting(true);
-        setError(null);
-        // Simulate connection delay
-        setTimeout(() => {
-            setIsConnecting(false);
-            setIsConnected(true);
-        }, 1500);
+        // Trigger the real Bluetooth permissions request
+        connectObd();
     };
 
     const handleAnalyze = async () => {
@@ -68,8 +66,8 @@ const AIEngine: React.FC = () => {
                                 <span className="font-semibold text-gray-200 text-sm">OBD-II Telemetry</span>
                             </div>
                             <div className={`flex items-center gap-2 text-xs font-bold ${isConnected ? 'text-green-500' : 'text-gray-600'}`}>
-                                {isConnected ? 'LIVE' : 'OFFLINE'}
-                                <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-gray-600'}`}></div>
+                                {isConnected ? 'LIVE' : (obdState === ObdConnectionState.Error ? 'ERROR' : 'OFFLINE')}
+                                <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : (obdState === ObdConnectionState.Error ? 'bg-red-500' : 'bg-gray-600')}`}></div>
                             </div>
                         </div>
                         

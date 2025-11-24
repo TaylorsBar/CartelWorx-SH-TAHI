@@ -1,7 +1,8 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, useLocation } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
+import SystemStatusBar from './components/SystemStatusBar';
 import MobileNavBar from './components/MobileNavBar';
 import Dashboard from './pages/Dashboard';
 import Diagnostics from './pages/Diagnostics';
@@ -14,28 +15,28 @@ import Hedera from './pages/Hedera';
 import Appearance from './pages/Appearance';
 import Accessories from './pages/Accessories';
 import { AppearanceProvider } from './contexts/AppearanceContext';
-import CoPilot from './components/CoPilot';
 import { useVehicleTelemetry, useVehicleConnection } from './hooks/useVehicleData';
-import { MOCK_ALERTS } from './components/Alerts';
+import { useAIStore } from './stores/aiStore';
 import RacePack from './pages/RacePack';
+import GlobalAssistant from './components/GlobalAssistant';
 
 const MainLayout: React.FC = () => {
   const location = useLocation();
-  
-  // Separate hooks for performance: Telemetry updates frequently, Connection does not.
   const { latestData, hasActiveFault } = useVehicleTelemetry();
   const { startSimulation } = useVehicleConnection();
+  const setContext = useAIStore(state => state.setContext);
 
-  // Explicitly manage simulation lifecycle at the app root
   useEffect(() => {
     startSimulation();
   }, [startSimulation]);
 
-  const activeAlerts = hasActiveFault 
-    ? MOCK_ALERTS.filter(alert => alert.isFaultRelated) 
-    : [];
+  // Update AI Context on route change
+  useEffect(() => {
+      const routeName = location.pathname === '/' ? 'Cockpit Dashboard' : 
+                        location.pathname.replace('/', '').replace('-', ' ').toUpperCase();
+      setContext(routeName);
+  }, [location.pathname, setContext]);
 
-  // Routes that require full-screen edge-to-edge layout
   const isFullScreenRoute = [
     '/', 
     '/race-pack', 
@@ -48,7 +49,8 @@ const MainLayout: React.FC = () => {
     <div className="flex h-screen w-screen bg-transparent text-gray-200 overflow-hidden font-sans">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden relative">
-        {/* Main Content Area */}
+        <SystemStatusBar />
+        
         <main className={`flex-1 overflow-x-hidden overflow-y-auto relative z-10 scroll-smooth custom-scrollbar ${isFullScreenRoute ? 'p-0 pb-20 md:pb-0' : 'p-4 md:p-6 pb-24 md:pb-6'}`}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
@@ -65,20 +67,58 @@ const MainLayout: React.FC = () => {
           </Routes>
         </main>
         
-        {/* Floating UI Elements */}
-        <CoPilot latestVehicleData={latestData} activeAlerts={activeAlerts} />
+        <GlobalAssistant />
         <MobileNavBar />
       </div>
     </div>
   );
 };
 
+const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
+    const [step, setStep] = useState(0);
+
+    useEffect(() => {
+        const steps = [
+            setTimeout(() => setStep(1), 500),  // Kernel
+            setTimeout(() => setStep(2), 1200), // Modules
+            setTimeout(() => setStep(3), 2000), // GUI
+            setTimeout(() => onComplete(), 2800) // Finish
+        ];
+        return () => steps.forEach(clearTimeout);
+    }, [onComplete]);
+
+    return (
+        <div className="h-screen w-screen bg-black flex flex-col items-center justify-center font-mono text-xs z-[100]">
+            <div className="w-64 space-y-2">
+                <div className="flex justify-between text-gray-500">
+                    <span>GENESIS BIOS v4.02</span>
+                    <span>MEM: 64TB OK</span>
+                </div>
+                <div className="h-1 w-full bg-[#111] overflow-hidden">
+                    <div className="h-full bg-brand-cyan transition-all duration-500 ease-out" style={{ width: `${(step/3)*100}%` }}></div>
+                </div>
+                <div className="space-y-1 text-gray-400">
+                    {step >= 0 && <div className="text-white">> Mounting Kernel... OK</div>}
+                    {step >= 1 && <div className="text-white">> Loading Drivers [ECU, VIS, NAV]... OK</div>}
+                    {step >= 2 && <div className="text-brand-cyan">> Initializing Graphic Interface...</div>}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const App: React.FC = () => {
+  const [booted, setBooted] = useState(false);
+
   return (
     <AppearanceProvider>
-      <HashRouter>
-        <MainLayout />
-      </HashRouter>
+      {!booted ? (
+          <BootSequence onComplete={() => setBooted(true)} />
+      ) : (
+          <HashRouter>
+            <MainLayout />
+          </HashRouter>
+      )}
     </AppearanceProvider>
   );
 };

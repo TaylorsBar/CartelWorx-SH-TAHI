@@ -137,6 +137,7 @@ export class ObdService {
 
   private async initializeElm327() {
     this.onStatusChange(ObdConnectionState.Initializing);
+    
     // Standard initialization sequence
     await this.runCommand("AT Z");   // Reset
     await this.runCommand("AT E0");  // Echo Off
@@ -144,7 +145,18 @@ export class ObdService {
     await this.runCommand("AT S0");  // Spaces Off
     await this.runCommand("AT H0");  // Headers Off
     await this.runCommand("AT ATS 1"); // Adaptive Timing Auto
-    await this.runCommand("AT SP 0"); // Auto Protocol
+    
+    // Enhanced Protocol Selection & Verification
+    // 'AT SP 0' sets the protocol to Auto, allowing the ELM327 to search.
+    await this.runCommand("AT SP 0"); 
+    
+    // 'AT DP' (Display Protocol) is useful to confirm what the adapter detected.
+    const protocol = await this.runCommand("AT DP");
+    console.debug("OBD Detected Protocol:", protocol);
+
+    // We trigger a simple PID request (0100 - Supported PIDs) to force the protocol negotiation immediately.
+    // This ensures the connection is stable before the main polling loop starts.
+    await this.runCommand("0100"); 
   }
 
   public async runCommand(cmd: string): Promise<string> {

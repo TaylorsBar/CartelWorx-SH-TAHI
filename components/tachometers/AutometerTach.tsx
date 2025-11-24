@@ -95,13 +95,6 @@ const AutometerTach: React.FC<AutometerTachProps> = ({
                         <stop offset="80%" stopColor="#111" />
                         <stop offset="100%" stopColor="#000" />
                     </radialGradient>
-                    <linearGradient id="chromeLogo" x1="0" y1="0" x2="0" y2="100%">
-                        <stop offset="0%" stopColor="#ffffff" />
-                        <stop offset="45%" stopColor="#b0b0b0" />
-                        <stop offset="50%" stopColor="#404040" />
-                        <stop offset="55%" stopColor="#b0b0b0" />
-                        <stop offset="100%" stopColor="#ffffff" />
-                    </linearGradient>
                     <linearGradient id="lcdGrad" x1="0%" y1="0%" x2="0%" y2="100%">
                         <stop offset="0%" stopColor="#0a0a0a" />
                         <stop offset="100%" stopColor="#1a1a1a" />
@@ -118,9 +111,6 @@ const AutometerTach: React.FC<AutometerTachProps> = ({
                     </filter>
                     <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
                         <feDropShadow dx="4" dy="4" stdDeviation="4" floodColor="black" floodOpacity="0.5"/>
-                    </filter>
-                    <filter id="logoShadow" x="-20%" y="-20%" width="140%" height="140%">
-                        <feDropShadow dx="2" dy="2" stdDeviation="2" floodColor="black" floodOpacity="0.8"/>
                     </filter>
                     <filter id="lcdGlow">
                         <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
@@ -171,20 +161,15 @@ const AutometerTach: React.FC<AutometerTachProps> = ({
                     {/* Face */}
                     <circle cx="0" cy="0" r="185" fill="url(#faceGrad)" />
 
-                    {/* --- BRANDING (KARAPIRO CARTEL) --- */}
+                    {/* --- BRANDING --- */}
                     <g transform="translate(0, -90)">
-                        <text x="0" y="-20" textAnchor="middle" fill="#666" fontFamily="Orbitron" fontSize="12" fontWeight="bold" letterSpacing="4" filter="url(#logoShadow)">
+                        <text x="0" y="-20" textAnchor="middle" fill="#ccc" fontFamily="Orbitron" fontSize="12" fontWeight="bold" letterSpacing="4">
                             KARAPIRO
                         </text>
-                        <text x="0" y="20" textAnchor="middle" fill="url(#chromeLogo)" stroke="#000" strokeWidth="0.5" fontFamily="Orbitron" fontSize="32" fontWeight="900" fontStyle="italic" letterSpacing="-1" filter="url(#logoShadow)">
+                        <text x="0" y="25" textAnchor="middle" fill="white" stroke="#000" strokeWidth="0.5" fontFamily="Orbitron" fontSize="40" fontWeight="900" fontStyle="italic" letterSpacing="-1">
                             CARTEL
                         </text>
-                        <g transform="translate(-60, 30) skewX(-20)">
-                            <rect x="0" y="0" width="15" height="3" fill="#D32F2F" />
-                            <rect x="20" y="0" width="80" height="3" fill="#D32F2F" />
-                            <rect x="105" y="0" width="15" height="3" fill="#D32F2F" />
-                        </g>
-                        <text x="0" y="45" textAnchor="middle" fill="#555" fontFamily="monospace" fontSize="8" fontWeight="bold" letterSpacing="2">
+                        <text x="0" y="45" textAnchor="middle" fill="#777" fontFamily="monospace" fontSize="8" fontWeight="bold" letterSpacing="2">
                             STATE HIGHWAY SPEED SHOP
                         </text>
                     </g>
@@ -193,23 +178,22 @@ const AutometerTach: React.FC<AutometerTachProps> = ({
                     <text textAnchor="middle" y="60" fill="#ccc" className="font-display italic font-bold text-xl">RPM</text>
                     <text textAnchor="middle" y="75" fill="#888" className="font-sans text-xs font-bold">x1000</text>
 
-                    {/* LCD Gear Display (Integrated Right) */}
-                    <g transform="translate(100, 0)">
-                        <path d="M -40 -35 L 40 -35 L 50 45 L -30 45 Z" fill="url(#lcdGrad)" stroke="#333" strokeWidth="2" filter="url(#dropShadow)" />
-                        <rect x="-35" y="-30" width="80" height="70" fill="none" stroke="#222" strokeWidth="1" />
-                        <text x="5" y="-15" textAnchor="middle" fill="#555" fontSize="10" fontFamily="sans-serif" fontWeight="bold">GEAR</text>
-                        <text x="5" y="30" textAnchor="middle" fill="#fff" fontSize="50" fontFamily="Orbitron" fontWeight="bold" filter="url(#lcdGlow)">
+                    {/* LCD Gear Display (Left) */}
+                    <g transform="translate(-100, 40)">
+                        <rect x="-35" y="-30" width="70" height="50" rx="3" fill="url(#lcdGrad)" stroke="#333" strokeWidth="2" filter="url(#dropShadow)" />
+                        <text x="0" y="-15" textAnchor="middle" fill="#555" fontSize="10" fontFamily="sans-serif" fontWeight="bold">GEAR</text>
+                        <text x="0" y="15" textAnchor="middle" fill="#fff" fontSize="30" fontFamily="Orbitron" fontWeight="bold" filter="url(#lcdGlow)">
                              {gear === 0 ? 'N' : gear}
                         </text>
                     </g>
 
-                    {/* LCD Speed Display (Integrated Bottom) */}
+                    {/* LCD Speed Display (Bottom) */}
                     <g transform="translate(0, 120)">
-                         <path d="M -60 -25 L 60 -25 L 50 35 L -50 35 Z" fill="url(#lcdGrad)" stroke="#333" strokeWidth="2" filter="url(#dropShadow)" />
-                         <text x="0" y="15" textAnchor="middle" fill="#00F0FF" fontSize="35" fontFamily="Orbitron" fontWeight="bold" filter="url(#lcdGlow)">
-                             {animatedSpeed.toFixed(0)}
+                         <rect x="-50" y="-20" width="100" height="50" rx="3" fill="url(#lcdGrad)" stroke="#333" strokeWidth="2" filter="url(#dropShadow)" />
+                         <text x="0" y="10" textAnchor="middle" fill="#00F0FF" fontSize="30" fontFamily="Orbitron" fontWeight="bold" filter="url(#lcdGlow)">
+                             {isNaN(animatedSpeed) ? '---' : animatedSpeed.toFixed(0)}
                          </text>
-                         <text x="0" y="28" textAnchor="middle" fill="#555" fontSize="8" fontFamily="sans-serif" fontWeight="bold" letterSpacing="1">KM/H</text>
+                         <text x="0" y="23" textAnchor="middle" fill="#555" fontSize="8" fontFamily="sans-serif" fontWeight="bold" letterSpacing="1">KM/H</text>
                     </g>
 
                     {/* Ticks */}

@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 export const KarapiroLogo: React.FC<{ className?: string }> = ({ className }) => (
@@ -44,11 +43,11 @@ export const KarapiroLogo: React.FC<{ className?: string }> = ({ className }) =>
     </text>
     
     {/* Racing Stripes */}
-    <rect x="20" y="40" width="20" height="4" fill="#D32F2F" skewX="-20" />
-    <rect x="45" y="40" width="10" height="4" fill="#D32F2F" skewX="-20" />
+    <rect x="20" y="40" width="20" height="4" fill="#D32F2F" transform="skewX(-20)" />
+    <rect x="45" y="40" width="10" height="4" fill="#D32F2F" transform="skewX(-20)" />
     
-    <rect x="245" y="40" width="10" height="4" fill="#D32F2F" skewX="-20" />
-    <rect x="260" y="40" width="20" height="4" fill="#D32F2F" skewX="-20" />
+    <rect x="245" y="40" width="10" height="4" fill="#D32F2F" transform="skewX(-20)" />
+    <rect x="260" y="40" width="20" height="4" fill="#D32F2F" transform="skewX(-20)" />
 
   </svg>
 );

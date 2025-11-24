@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { SensorDataPoint, ObdConnectionState } from '../types';
 import { ObdService } from '../services/ObdService';
 import { GenesisEKFUltimate } from '../services/GenesisEKFUltimate';
+import { VisualOdometryResult } from '../services/VisionGroundTruth';
 
 // --- Constants ---
 const UPDATE_INTERVAL_MS = 50; // 20Hz
@@ -47,6 +48,27 @@ const generateInitialData = (): SensorDataPoint[] => {
   return data;
 };
 
+// Generate a default 16x16 VE Table
+const generateBaseMap = (): number[][] => {
+    const map: number[][] = [];
+    for (let loadIdx = 0; loadIdx < 16; loadIdx++) {
+        const row: number[] = [];
+        const load = loadIdx * (100/15);
+        for (let rpmIdx = 0; rpmIdx < 16; rpmIdx++) {
+            const rpm = rpmIdx * (8000/15);
+            // Procedural VE shape
+            const rpmNorm = rpm / 8000;
+            const loadNorm = load / 100;
+            let ve = 40 + (loadNorm * 20); // Base load increases VE
+            ve += Math.sin(rpmNorm * Math.PI) * 40; // Peak torque curve
+            ve += (Math.random() * 2 - 1); // Slight noise/roughness
+            row.push(Math.max(0, Math.min(120, ve)));
+        }
+        map.push(row);
+    }
+    return map;
+};
+
 // --- Module-Level State (Physics & Services) ---
 enum SimState { IDLE, ACCELERATING, CRUISING, BRAKING, CORNERING }
 let currentSimState = SimState.IDLE;
@@ -73,6 +95,13 @@ let obdCache = {
     lastUpdate: 0
 };
 
+interface TuningState {
+    veTable: number[][]; // 16x16
+    ignitionTable: number[][]; // 16x16 (placeholder for now)
+    boostTarget: number; // psi
+    globalFuelTrim: number; // %
+}
+
 interface VehicleStoreState {
   data: SensorDataPoint[];
   latestData: SensorDataPoint;
@@ -83,11 +112,22 @@ interface VehicleStoreState {
     gpsActive: boolean;
     fusionUncertainty: number;
   };
+  
+  // Tuning State
+  tuning: TuningState;
 
+  // Actions
   startSimulation: () => void;
   stopSimulation: () => void;
   connectObd: () => Promise<void>;
   disconnectObd: () => void;
+  
+  // CV Action
+  processVisionFrame: (imageData: ImageData) => VisualOdometryResult;
+  
+  // Tuning Actions
+  updateMapCell: (table: 've' | 'ign', row: number, col: number, value: number) => void;
+  smoothMap: (table: 've' | 'ign') => void;
 }
 
 // Independent Polling Loop
@@ -95,16 +135,14 @@ const startObdPolling = async () => {
     isObdPolling = true;
     while (isObdPolling && obdService) {
         try {
-            // Priority 1: High frequency
             const rpmRaw = await obdService.runCommand("010C");
             const speedRaw = await obdService.runCommand("010D");
-            const mapRaw = await obdService.runCommand("010B"); // For boost
+            const mapRaw = await obdService.runCommand("010B"); 
 
             if (rpmRaw) obdCache.rpm = obdService.parseRpm(rpmRaw);
             if (speedRaw) obdCache.speed = obdService.parseSpeed(speedRaw);
             if (mapRaw) obdCache.map = obdService.parseMap(mapRaw);
 
-            // Priority 2: Medium frequency (every other loop logic could go here, but sequential is fine for now)
             const tempRaw = await obdService.runCommand("0105");
             if (tempRaw) obdCache.coolant = obdService.parseCoolant(tempRaw);
             
@@ -114,24 +152,23 @@ const startObdPolling = async () => {
             const loadRaw = await obdService.runCommand("0104");
             if (loadRaw) obdCache.load = obdService.parseLoad(loadRaw);
 
-            // Priority 3: Low frequency
             if (Math.random() > 0.8) {
                 const voltRaw = await obdService.runCommand("AT RV");
                 if (voltRaw) obdCache.voltage = obdService.parseVoltage(voltRaw);
             }
 
             obdCache.lastUpdate = Date.now();
-            
-            // Small throttle to prevent flooding if the adapter is super fast, 
-            // though usually runCommand await is the bottleneck.
             await new Promise(r => setTimeout(r, 10));
 
         } catch (e) {
             console.warn("OBD Poll Error", e);
-            await new Promise(r => setTimeout(r, 500)); // Backoff on error
+            await new Promise(r => setTimeout(r, 500));
         }
     }
 };
+
+// Timestamp of last visual frame processing
+let lastVisionUpdate = 0;
 
 export const useVehicleStore = create<VehicleStoreState>((set, get) => ({
   data: generateInitialData(),
@@ -139,6 +176,66 @@ export const useVehicleStore = create<VehicleStoreState>((set, get) => ({
   hasActiveFault: false,
   obdState: ObdConnectionState.Disconnected,
   ekfStats: { visionConfidence: 0, gpsActive: false, fusionUncertainty: 0 },
+  
+  tuning: {
+      veTable: generateBaseMap(),
+      ignitionTable: generateBaseMap(), 
+      boostTarget: 18.0,
+      globalFuelTrim: 0,
+  },
+
+  processVisionFrame: (imageData: ImageData) => {
+      const now = Date.now();
+      let dt = (now - lastVisionUpdate) / 1000;
+      if (dt <= 0 || dt > 1.0) dt = 0.05; // fallback
+      lastVisionUpdate = now;
+
+      // Feed into EKF
+      const result = ekf.processCameraFrame(imageData, dt);
+      
+      // Update store with confidence stats immediately (optional, but good for UI)
+      set(state => ({
+          ekfStats: { ...state.ekfStats, visionConfidence: result.confidence }
+      }));
+
+      return result;
+  },
+
+  updateMapCell: (table, row, col, value) => {
+      set(state => {
+          const newMap = table === 've' ? [...state.tuning.veTable] : [...state.tuning.ignitionTable];
+          newMap[row] = [...newMap[row]]; // Copy row
+          newMap[row][col] = value;
+          return {
+              tuning: {
+                  ...state.tuning,
+                  [table === 've' ? 'veTable' : 'ignitionTable']: newMap
+              }
+          };
+      });
+  },
+
+  smoothMap: (table) => {
+      set(state => {
+           const map = table === 've' ? state.tuning.veTable : state.tuning.ignitionTable;
+           const newMap = map.map((row, r) => row.map((val, c) => {
+               // Simple 3x3 kernel average
+               let sum = val;
+               let count = 1;
+               if (r>0) { sum += map[r-1][c]; count++; }
+               if (r<15) { sum += map[r+1][c]; count++; }
+               if (c>0) { sum += map[r][c-1]; count++; }
+               if (c<15) { sum += map[r][c+1]; count++; }
+               return sum / count;
+           }));
+           return {
+               tuning: {
+                   ...state.tuning,
+                   [table === 've' ? 'veTable' : 'ignitionTable']: newMap
+               }
+           }
+      });
+  },
 
   connectObd: async () => {
     if (!obdService) {
@@ -150,7 +247,6 @@ export const useVehicleStore = create<VehicleStoreState>((set, get) => ({
       });
     }
     await obdService.connect();
-    // Start polling once connected
     startObdPolling();
   },
 
@@ -173,16 +269,10 @@ export const useVehicleStore = create<VehicleStoreState>((set, get) => ({
               longitude: pos.coords.longitude
             };
           },
-          (err) => {
-             // Log once but don't spam; GPS just won't update
-             if (err.code === 1) console.warn("GPS Permission Denied: Using dead-reckoning fallback.");
-             else console.warn("GPS Error:", err.message);
-          },
+          (err) => { if (err.code === 1) console.warn("GPS Permission Denied"); },
           { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
         );
-      } catch (e) {
-        console.warn("Geolocation API access failed:", e);
-      }
+      } catch (e) { console.warn("Geolocation API access failed:", e); }
     }
 
     simulationInterval = setInterval(() => {
@@ -190,19 +280,15 @@ export const useVehicleStore = create<VehicleStoreState>((set, get) => ({
       const now = Date.now();
       const deltaTimeSeconds = (now - lastUpdateTime) / 1000.0;
       lastUpdateTime = now;
-
       const prev = state.latestData;
       
-      // Determine if we have fresh real data
       const isObdFresh = state.obdState === ObdConnectionState.Connected && (now - obdCache.lastUpdate < 2000);
       let newPointSource: 'sim' | 'live_obd' = isObdFresh ? 'live_obd' : 'sim';
 
-      // --- Physics / Sim Fallback ---
-      // We still run the sim logic to provide smooth fallbacks or fill missing data (like G-force)
       let { rpm, gear } = prev;
       
       if (!isObdFresh) {
-          // ... (Sim Logic) ...
+          // --- Simulation State Machine ---
           if (now > simStateTimeout) {
             const rand = Math.random();
             switch (currentSimState) {
@@ -251,104 +337,96 @@ export const useVehicleStore = create<VehicleStoreState>((set, get) => ({
           }
           rpm = Math.max(RPM_IDLE, Math.min(rpm, RPM_MAX));
       } else {
-          // Use Real OBD RPM
           rpm = obdCache.rpm;
-          // Simple Gear Estimation based on Speed/RPM ratio could be added here
       }
 
-      // --- 6-DOF EKF Update ---
-      
-      // 1. Prepare Inputs
+      // --- EKF & Physics ---
       let inputSpeed = 0;
       let accelEst = 0; 
-
       if (isObdFresh) {
           inputSpeed = obdCache.speed;
-          accelEst = (obdCache.speed - prev.speed) / deltaTimeSeconds / 3.6; // m/s^2 approx
-          ekf.fuseObdSpeed(inputSpeed * 1000 / 3600); // convert km/h to m/s
+          accelEst = (obdCache.speed - prev.speed) / deltaTimeSeconds / 3.6; 
+          ekf.fuseObdSpeed(inputSpeed * 1000 / 3600); 
       } else {
           const simSpeed = (rpm / (GEAR_RATIOS[gear] * 300)) * (1 - (1 / gear)) * 10;
           inputSpeed = Math.max(0, Math.min(simSpeed, SPEED_MAX));
           ekf.fuseObdSpeed(inputSpeed * 1000 / 3600);
       }
 
-      // 2. Synthesize IMU Data for Prediction Step
-      // Body Frame Accelerations (approximate from G-forces)
-      // gForceY is longitudinal (accel/brake), gForceX is lateral (cornering)
-      let gx = (Math.random() - 0.5) * 0.1; // Lateral G
-      let gy = accelEst / 9.81; // Longitudinal G
-      if (currentSimState === SimState.CORNERING) {
-          gx = (Math.random() > 0.5 ? 1 : -1) * (0.3 + Math.random() * 0.5);
-      }
+      // Generate simulated IMU data
+      let gx = (Math.random() - 0.5) * 0.1;
+      let gy = accelEst / 9.81;
+      if (currentSimState === SimState.CORNERING) gx = (Math.random() > 0.5 ? 1 : -1) * (0.3 + Math.random() * 0.5);
       
-      const ax = gy * 9.81; // m/s^2 Forward
-      const ay = gx * 9.81; // m/s^2 Right
-      const az = 0 + (Math.random() - 0.5) * 0.2; // Vertical (road noise)
+      const ax = gy * 9.81;
+      const ay = gx * 9.81;
+      const az = 0 + (Math.random() - 0.5) * 0.2;
 
-      // Angular Rates (rad/s)
-      // Yaw rate ~ Lateral Accel / Velocity
       const velocityMs = Math.max(1, prev.speed / 3.6);
-      const r = ay / velocityMs; // Yaw rate
-      
-      // Pitch rate ~ change in Longitudinal Accel (Dive/Squat)
-      // Simple damped spring model for pitch
+      const r = ay / velocityMs;
       const q = (gy - prev.gForceY) * 2.0; 
-      
-      // Roll rate ~ change in Lateral Accel
       const p = (gx - prev.gForceX) * 1.5;
 
-      // 3. EKF Predict Step
+      // 1. Prediction Step (IMU)
       ekf.predict([ax, ay, az], [p, q, r], deltaTimeSeconds);
+      
+      // 2. Vision Fusion Step (Only in Sim Mode here)
+      // Note: If real vision is running, it calls processVisionFrame independently.
+      // We check if real vision is active (via timestamp) to avoid double fusion or sim fusion
+      if (Date.now() - lastVisionUpdate > 500) {
+          ekf.fuseVision(inputSpeed, deltaTimeSeconds);
+      }
 
-      // 4. GPS Fusion
+      // 3. GPS Fusion Step (if available)
       if (gpsLatest?.speed !== null && gpsLatest?.speed !== undefined) {
         ekf.fuseGps(gpsLatest.speed, gpsLatest.accuracy);
       }
 
-      // 5. Get Fused Output
       const fusedSpeedMs = ekf.getEstimatedSpeed();
       const fusedSpeedKph = fusedSpeedMs * 3.6;
-      
       const distanceThisFrame = fusedSpeedMs * deltaTimeSeconds;
 
-      // --- Coordinate Simulation (Fix for Static GPS) ---
+      // Update position
       let currentLat = prev.latitude;
       let currentLon = prev.longitude;
-
       if (gpsLatest) {
           currentLat = gpsLatest.latitude;
           currentLon = gpsLatest.longitude;
       } else if (fusedSpeedKph > 0) {
-          // Simulate movement if we have speed but no GPS signal
-          // Moving roughly North East for demonstration
-          // 1 degree latitude is approx 111km
           const distKm = (fusedSpeedKph * (deltaTimeSeconds / 3600)); 
           const dLat = distKm / 111;
           const dLon = distKm / (111 * Math.cos(currentLat * (Math.PI / 180)));
-          
           currentLat += dLat * 0.707;
           currentLon += dLon * 0.707;
       }
+
+      // --- Map Lookup for Engine Load/Performance ---
+      const rpmIndex = Math.min(15, Math.floor(rpm / (8000/15)));
+      let throttle = 15;
+      if (currentSimState === SimState.ACCELERATING) throttle = 80;
+      if (currentSimState === SimState.CRUISING) throttle = 30;
+      const loadIndex = Math.min(15, Math.floor(throttle / (100/15)));
       
-      // --- Construct Data Point ---
+      const veValue = state.tuning.veTable[loadIndex][rpmIndex];
+      const simulatedLoad = throttle; 
+
       const newPoint: SensorDataPoint = {
         time: now,
         rpm: rpm,
         speed: fusedSpeedKph,
         gear: gear,
-        fuelUsed: prev.fuelUsed + (rpm / RPM_MAX) * 0.005,
+        fuelUsed: prev.fuelUsed + (rpm / RPM_MAX) * (veValue/100) * 0.005, 
         inletAirTemp: isObdFresh ? obdCache.intake : (25 + (fusedSpeedKph / SPEED_MAX) * 20),
         batteryVoltage: isObdFresh && obdCache.voltage > 5 ? obdCache.voltage : 13.8,
         engineTemp: isObdFresh ? obdCache.coolant : (90 + (rpm / RPM_MAX) * 15),
         fuelTemp: 20 + (fusedSpeedKph / SPEED_MAX) * 10,
-        // Calculate boost from MAP if available (MAP - 100kPa approx for sea level) -> Bar
-        turboBoost: isObdFresh ? (obdCache.map - 100) / 100 : (-0.8 + (rpm / RPM_MAX) * 2.8 * (gear / 6)),
+        turboBoost: isObdFresh ? (obdCache.map - 100) / 100 : (-0.8 + (rpm / RPM_MAX) * (state.tuning.boostTarget/14.7) * (gear / 6)),
         fuelPressure: 3.5 + (rpm / RPM_MAX) * 2,
         oilPressure: 1.5 + (rpm / RPM_MAX) * 5.0,
         shortTermFuelTrim: 2.0 + (Math.random() - 0.5) * 4,
         longTermFuelTrim: prev.longTermFuelTrim,
         o2SensorVoltage: 0.1 + (0.5 + Math.sin(now / 500) * 0.4),
-        engineLoad: isObdFresh ? obdCache.load : (15 + (rpm - RPM_IDLE) / (RPM_MAX - RPM_IDLE) * 85),
+        engineLoad: isObdFresh ? obdCache.load : simulatedLoad,
         distance: prev.distance + distanceThisFrame,
         gForceX: gx,
         gForceY: gy,
@@ -362,16 +440,16 @@ export const useVehicleStore = create<VehicleStoreState>((set, get) => ({
         newData.shift();
       }
 
-      set({
+      set(state => ({
         data: newData,
         latestData: newPoint,
         hasActiveFault: false,
         ekfStats: {
-          visionConfidence: 0, 
+          ...state.ekfStats, // preserve vision confidence if updated elsewhere
           gpsActive: gpsLatest !== null,
           fusionUncertainty: ekf.getUncertainty()
         }
-      });
+      }));
 
     }, UPDATE_INTERVAL_MS);
   },
