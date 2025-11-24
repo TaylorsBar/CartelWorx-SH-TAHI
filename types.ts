@@ -26,6 +26,15 @@ export interface SensorDataPoint {
   longitude: number;
   // Source tracking
   source?: 'sim' | 'live_obd';
+  // Additional Sensor Data
+  maf: number;
+  timingAdvance: number;
+  throttlePos: number;
+  fuelLevel: number;
+  barometricPressure: number;
+  ambientTemp: number;
+  fuelRailPressure: number;
+  lambda: number;
 }
 
 export enum AlertLevel {
@@ -175,4 +184,11 @@ export interface CoPilotAction {
   action: 'NAVIGATE' | 'SPEAK' | 'TOGGLE_FEATURE' | 'ANALYZE';
   payload?: string; // Route path, feature name, or null
   textToSpeak: string;
+}
+
+// New: Structured Voice Response from Gemini
+export interface VoiceActionResponse {
+    speech: string;
+    action: 'NAVIGATE' | 'NONE';
+    target: string | null;
 }

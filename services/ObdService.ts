@@ -293,4 +293,82 @@ export class ObdService {
       } catch { return 0; }
       return 0;
   }
+
+  public parseTimingAdvance(response: string): number {
+      // PID 0E. (A - 128) / 2
+      try {
+          const data = this.extractData(response, "410E");
+          if (!data || data.length < 2) return 0;
+          return (parseInt(data.substring(0, 2), 16) - 128) / 2;
+      } catch { return 0; }
+  }
+
+  public parseMaf(response: string): number {
+      // PID 10. ((256*A)+B) / 100 (g/s)
+      try {
+          const data = this.extractData(response, "4110");
+          if (!data || data.length < 4) return 0;
+          const a = parseInt(data.substring(0, 2), 16);
+          const b = parseInt(data.substring(2, 4), 16);
+          return ((256 * a) + b) / 100;
+      } catch { return 0; }
+  }
+
+  public parseThrottlePos(response: string): number {
+      // PID 11. A * 100 / 255
+      try {
+          const data = this.extractData(response, "4111");
+          if (!data || data.length < 2) return 0;
+          return (parseInt(data.substring(0, 2), 16) * 100) / 255;
+      } catch { return 0; }
+  }
+
+  public parseFuelRailPressure(response: string): number {
+      // PID 23. ((256*A)+B) * 10 (kPa gauge)
+      try {
+          const data = this.extractData(response, "4123");
+          if (!data || data.length < 4) return 0;
+          const a = parseInt(data.substring(0, 2), 16);
+          const b = parseInt(data.substring(2, 4), 16);
+          return ((256 * a) + b) * 10;
+      } catch { return 0; }
+  }
+
+  public parseFuelLevel(response: string): number {
+      // PID 2F. A * 100 / 255
+      try {
+          const data = this.extractData(response, "412F");
+          if (!data || data.length < 2) return 0;
+          return (parseInt(data.substring(0, 2), 16) * 100) / 255;
+      } catch { return 0; }
+  }
+
+  public parseBarometricPressure(response: string): number {
+      // PID 33. A (kPa)
+      try {
+          const data = this.extractData(response, "4133");
+          if (!data || data.length < 2) return 0;
+          return parseInt(data.substring(0, 2), 16);
+      } catch { return 0; }
+  }
+
+  public parseLambda(response: string): number {
+      // PID 44. ((256*A)+B) / 32768 (Ratio)
+      try {
+          const data = this.extractData(response, "4144");
+          if (!data || data.length < 4) return 0;
+          const a = parseInt(data.substring(0, 2), 16);
+          const b = parseInt(data.substring(2, 4), 16);
+          return ((256 * a) + b) / 32768;
+      } catch { return 0; }
+  }
+
+  public parseAmbientTemp(response: string): number {
+      // PID 46. A - 40
+      try {
+          const data = this.extractData(response, "4146");
+          if (!data || data.length < 2) return 0;
+          return parseInt(data.substring(0, 2), 16) - 40;
+      } catch { return 0; }
+  }
 }

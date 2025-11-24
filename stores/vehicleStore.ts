@@ -42,7 +42,15 @@ const generateInitialData = (): SensorDataPoint[] => {
       gForceY: 0,
       latitude: DEFAULT_LAT,
       longitude: DEFAULT_LON,
-      source: 'sim'
+      source: 'sim',
+      maf: 3.5,
+      timingAdvance: 10,
+      throttlePos: 15,
+      fuelLevel: 75,
+      barometricPressure: 101.3,
+      ambientTemp: 22,
+      fuelRailPressure: 3500,
+      lambda: 1.0
     });
   }
   return data;
@@ -92,6 +100,14 @@ let obdCache = {
     load: 0,
     map: 0, // kPa
     voltage: 0,
+    maf: 0,
+    timing: 0,
+    throttle: 0,
+    fuelLevel: 0,
+    baro: 0,
+    ambient: 0,
+    fuelRail: 0,
+    lambda: 0,
     lastUpdate: 0
 };
 
@@ -130,34 +146,68 @@ interface VehicleStoreState {
   smoothMap: (table: 've' | 'ign') => void;
 }
 
-// Independent Polling Loop
+// Independent Polling Loop with Weighted Strategy
 const startObdPolling = async () => {
     isObdPolling = true;
+    let loopCount = 0;
+
     while (isObdPolling && obdService) {
         try {
+            // --- High Frequency (Every Loop) ---
             const rpmRaw = await obdService.runCommand("010C");
             const speedRaw = await obdService.runCommand("010D");
             const mapRaw = await obdService.runCommand("010B"); 
+            const throttleRaw = await obdService.runCommand("0111"); // Throttle Pos
 
             if (rpmRaw) obdCache.rpm = obdService.parseRpm(rpmRaw);
             if (speedRaw) obdCache.speed = obdService.parseSpeed(speedRaw);
             if (mapRaw) obdCache.map = obdService.parseMap(mapRaw);
+            if (throttleRaw) obdCache.throttle = obdService.parseThrottlePos(throttleRaw);
 
-            const tempRaw = await obdService.runCommand("0105");
-            if (tempRaw) obdCache.coolant = obdService.parseCoolant(tempRaw);
-            
-            const intakeRaw = await obdService.runCommand("010F");
-            if (intakeRaw) obdCache.intake = obdService.parseIntakeTemp(intakeRaw);
+            // --- Medium Frequency (Every 5 Loops) ---
+            if (loopCount % 5 === 0) {
+                const tempRaw = await obdService.runCommand("0105");
+                if (tempRaw) obdCache.coolant = obdService.parseCoolant(tempRaw);
+                
+                const intakeRaw = await obdService.runCommand("010F");
+                if (intakeRaw) obdCache.intake = obdService.parseIntakeTemp(intakeRaw);
 
-            const loadRaw = await obdService.runCommand("0104");
-            if (loadRaw) obdCache.load = obdService.parseLoad(loadRaw);
+                const timingRaw = await obdService.runCommand("010E");
+                if (timingRaw) obdCache.timing = obdService.parseTimingAdvance(timingRaw);
 
-            if (Math.random() > 0.8) {
+                const mafRaw = await obdService.runCommand("0110");
+                if (mafRaw) obdCache.maf = obdService.parseMaf(mafRaw);
+
+                const lambdaRaw = await obdService.runCommand("0144");
+                if (lambdaRaw) obdCache.lambda = obdService.parseLambda(lambdaRaw);
+                
+                // Fallback load if throttle isn't enough
+                const loadRaw = await obdService.runCommand("0104");
+                if (loadRaw) obdCache.load = obdService.parseLoad(loadRaw);
+            }
+
+            // --- Low Frequency (Every 20 Loops) ---
+            if (loopCount % 20 === 0) {
                 const voltRaw = await obdService.runCommand("AT RV");
                 if (voltRaw) obdCache.voltage = obdService.parseVoltage(voltRaw);
+
+                const fuelLvlRaw = await obdService.runCommand("012F");
+                if (fuelLvlRaw) obdCache.fuelLevel = obdService.parseFuelLevel(fuelLvlRaw);
+
+                const baroRaw = await obdService.runCommand("0133");
+                if (baroRaw) obdCache.baro = obdService.parseBarometricPressure(baroRaw);
+
+                const ambRaw = await obdService.runCommand("0146");
+                if (ambRaw) obdCache.ambient = obdService.parseAmbientTemp(ambRaw);
+                
+                const railRaw = await obdService.runCommand("0123");
+                if (railRaw) obdCache.fuelRail = obdService.parseFuelRailPressure(railRaw);
             }
 
             obdCache.lastUpdate = Date.now();
+            loopCount++;
+            if (loopCount > 1000) loopCount = 0;
+
             await new Promise(r => setTimeout(r, 10));
 
         } catch (e) {
@@ -375,13 +425,11 @@ export const useVehicleStore = create<VehicleStoreState>((set, get) => ({
       ekf.predict([ax, ay, az], [p, q, r], deltaTimeSeconds);
       
       // 2. Vision Fusion Step (Only in Sim Mode here)
-      // Note: If real vision is running, it calls processVisionFrame independently.
-      // We check if real vision is active (via timestamp) to avoid double fusion or sim fusion
       if (Date.now() - lastVisionUpdate > 500) {
           ekf.fuseVision(inputSpeed, deltaTimeSeconds);
       }
 
-      // 3. GPS Fusion Step (if available)
+      // 3. GPS Fusion Step
       if (gpsLatest?.speed !== null && gpsLatest?.speed !== undefined) {
         ekf.fuseGps(gpsLatest.speed, gpsLatest.accuracy);
       }
@@ -414,6 +462,12 @@ export const useVehicleStore = create<VehicleStoreState>((set, get) => ({
       const veValue = state.tuning.veTable[loadIndex][rpmIndex];
       const simulatedLoad = throttle; 
 
+      // --- Calculations for Extended Data ---
+      const calcMaf = (rpm / RPM_MAX) * 250;
+      const calcTiming = 10 + (rpm/RPM_MAX) * 35;
+      const calcFuelRail = 3500 + (rpm/RPM_MAX) * 15000; // kPa
+      const calcLambda = 0.95 + (Math.random() * 0.1);
+
       const newPoint: SensorDataPoint = {
         time: now,
         rpm: rpm,
@@ -436,7 +490,17 @@ export const useVehicleStore = create<VehicleStoreState>((set, get) => ({
         gForceY: gy,
         latitude: currentLat,
         longitude: currentLon,
-        source: newPointSource
+        source: newPointSource,
+        
+        // Expanded Data Fields (Use Cache or Simulation)
+        maf: isObdFresh ? obdCache.maf : calcMaf,
+        timingAdvance: isObdFresh ? obdCache.timing : calcTiming,
+        throttlePos: isObdFresh ? obdCache.throttle : simulatedLoad,
+        fuelLevel: isObdFresh && obdCache.fuelLevel > 0 ? obdCache.fuelLevel : Math.max(0, (prev.fuelLevel || 75) - 0.0005),
+        barometricPressure: isObdFresh && obdCache.baro > 0 ? obdCache.baro : 101.3,
+        ambientTemp: isObdFresh && obdCache.ambient > 0 ? obdCache.ambient : 22,
+        fuelRailPressure: isObdFresh && obdCache.fuelRail > 0 ? obdCache.fuelRail : calcFuelRail,
+        lambda: isObdFresh && obdCache.lambda > 0 ? obdCache.lambda : calcLambda
       };
 
       const newData = [...state.data, newPoint];

@@ -1,6 +1,6 @@
 
-import { GoogleGenAI, Chat, GenerateContentResponse } from "@google/genai";
-import { MaintenanceRecord, SensorDataPoint, TuningSuggestion, VoiceCommandIntent, DiagnosticAlert, CoPilotAction } from '../types';
+import { GoogleGenAI, Chat, GenerateContentResponse, Type } from "@google/genai";
+import { MaintenanceRecord, SensorDataPoint, TuningSuggestion, VoiceCommandIntent, DiagnosticAlert, CoPilotAction, VoiceActionResponse } from '../types';
 
 const API_KEY = process.env.API_KEY;
 
@@ -44,7 +44,7 @@ export const sendMessageToAI = async (
         initializeChatSession();
     }
 
-    // Inject Context invisibly to the user
+    // Inject Detailed Telemetry Context
     const contextBlock = `
     [SYSTEM_CONTEXT_UPDATE]
     Current Screen: ${appContext}
@@ -52,9 +52,15 @@ export const sendMessageToAI = async (
     - RPM: ${vehicleData.rpm.toFixed(0)}
     - Speed: ${vehicleData.speed.toFixed(0)} km/h
     - Boost: ${vehicleData.turboBoost.toFixed(2)} bar
-    - AFR: ${(vehicleData.o2SensorVoltage * 2 + 9).toFixed(1)} (Lambda: ${(vehicleData.o2SensorVoltage*2).toFixed(2)})
+    - Throttle: ${vehicleData.throttlePos.toFixed(0)}%
+    - Timing Adv: ${vehicleData.timingAdvance.toFixed(1)} deg
+    - MAF: ${vehicleData.maf.toFixed(1)} g/s
+    - Lambda: ${vehicleData.lambda.toFixed(2)}
+    - Rail Pressure: ${vehicleData.fuelRailPressure.toFixed(0)} kPa
     - IAT: ${vehicleData.inletAirTemp.toFixed(0)} C
+    - Coolant: ${vehicleData.engineTemp.toFixed(0)} C
     - Oil P: ${vehicleData.oilPressure.toFixed(1)} bar
+    - Fuel Lvl: ${vehicleData.fuelLevel.toFixed(0)}%
     - Faults: ${vehicleData.engineTemp > 105 ? 'OVERHEAT WARNING' : 'None'}
     [/SYSTEM_CONTEXT_UPDATE]
     `;
@@ -70,12 +76,73 @@ export const sendMessageToAI = async (
     }
 };
 
+/**
+ * Specialized function for Voice Command Mode.
+ * Returns structured JSON to drive app navigation and speech simultaneously.
+ */
+export const processVoiceCommand = async (
+    userMessage: string,
+    vehicleData: SensorDataPoint,
+    currentRoute: string
+): Promise<VoiceActionResponse> => {
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `
+                User is driving/operating the vehicle. 
+                Current Route: ${currentRoute}
+                
+                Live Telemetry:
+                Speed: ${vehicleData.speed.toFixed(0)} km/h, RPM: ${vehicleData.rpm.toFixed(0)}, Temp: ${vehicleData.engineTemp.toFixed(0)}C.
+
+                User Command: "${userMessage}"
+
+                Task:
+                1. Determine if the user wants to navigate to a specific screen.
+                2. Generate a concise, cool response (max 1 sentence) for the TTS engine.
+                
+                Route Map:
+                - Dashboard/Cockpit -> '/'
+                - Tuning/Dyno/Maps -> '/tuning'
+                - Diagnostics/Codes -> '/diagnostics'
+                - Maintenance/Logs -> '/logbook'
+                - Race/Telemetry/Track -> '/race-pack'
+                - AI Core/Prediction -> '/ai-engine'
+                - AR/Vision/Camera -> '/ar-assistant'
+                - Security -> '/security'
+                - Settings/Appearance -> '/appearance'
+            `,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        speech: { type: Type.STRING, description: "Concise spoken response" },
+                        action: { type: Type.STRING, enum: ["NAVIGATE", "NONE"], description: "Action to take" },
+                        target: { type: Type.STRING, description: "Target route if action is NAVIGATE, else null" }
+                    },
+                    required: ["speech", "action"]
+                }
+            }
+        });
+
+        const jsonText = response.text;
+        if (!jsonText) throw new Error("Empty response");
+        return JSON.parse(jsonText) as VoiceActionResponse;
+
+    } catch (error) {
+        console.error("Voice Command Error:", error);
+        return {
+            speech: "Command processor offline.",
+            action: "NONE",
+            target: null
+        };
+    }
+}
+
 // --- Specific Feature Functions (Preserved for specific tools) ---
 
 export const getDiagnosticAnswer = async (query: string): Promise<string> => {
-  // Legacy wrapper, forwarding to main chat for consistency if needed, 
-  // but keeping separate for isolated Diagnostic page logic if preferred.
-  // For now, we'll do a direct stateless call for specific diagnostics to keep it clean.
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
@@ -110,6 +177,8 @@ export const getPredictiveAnalysis = async (
         - Long Term Fuel Trim: ${liveData.longTermFuelTrim.toFixed(1)}%
         - O2 Sensor Voltage: ${liveData.o2SensorVoltage.toFixed(2)}V
         - Engine Temp: ${liveData.engineTemp.toFixed(1)}°C
+        - MAF: ${liveData.maf?.toFixed(1) || 0} g/s
+        - Timing: ${liveData.timingAdvance?.toFixed(1) || 0} deg
 
         **Maintenance History**: ${JSON.stringify(maintenanceHistory, null, 2)}
 
@@ -154,11 +223,7 @@ export const getPredictiveAnalysis = async (
   }
 };
 
-// ... (Other export functions: getTuningSuggestion, getVoiceCommandIntent, generateComponentImage stay the same)
 export const getTuningSuggestion = async (liveData: SensorDataPoint, drivingStyle: string, conditions: string): Promise<TuningSuggestion> => {
-    // Placeholder to satisfy export, implementation assumed to persist or be re-included if needed.
-    // For brevity in this update, I'm ensuring the core Chat is the focus.
-    // Re-implementing strictly the JSON part to ensure compilation.
     return {
         suggestedParams: { fuelMap: 2, ignitionTiming: 1, boostPressure: 1.5 },
         analysis: { predictedGains: "Moderate", potentialRisks: "None" }
@@ -185,8 +250,6 @@ export const interpretHandsFreeCommand = async (
     vehicleData: SensorDataPoint,
     alerts: DiagnosticAlert[]
 ): Promise<CoPilotAction> => {
-    // Redirecting to the main chat logic usually, but keeping this for the specific CoPilot JSON structure return
-    // This is used by the legacy CoPilot, which we are replacing, but keeping purely for type safety if other files reference it.
     return { action: 'SPEAK', textToSpeak: "This module is deprecated. Use Global Assistant." };
 };
 
