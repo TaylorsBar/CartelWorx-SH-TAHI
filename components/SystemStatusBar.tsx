@@ -14,20 +14,55 @@ const SystemStatusBar: React.FC = () => {
     useEffect(() => {
         const timer = setInterval(() => setTime(new Date()), 1000);
         
-        const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+        const getIsFs = () => {
+             const doc = document as any;
+             return !!(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
+        }
+
+        const handleFsChange = () => {
+            setIsFullscreen(getIsFs());
+        };
+        
+        // Standard
         document.addEventListener('fullscreenchange', handleFsChange);
+        // Webkit (Chrome, Safari, Opera)
+        document.addEventListener('webkitfullscreenchange', handleFsChange);
+        // Mozilla (Firefox)
+        document.addEventListener('mozfullscreenchange', handleFsChange);
+        // IE/Edge
+        document.addEventListener('MSFullscreenChange', handleFsChange);
+
+        // Initial check
+        setIsFullscreen(getIsFs());
 
         return () => {
             clearInterval(timer);
             document.removeEventListener('fullscreenchange', handleFsChange);
+            document.removeEventListener('webkitfullscreenchange', handleFsChange);
+            document.removeEventListener('mozfullscreenchange', handleFsChange);
+            document.removeEventListener('MSFullscreenChange', handleFsChange);
         };
     }, []);
 
-    const toggleFullscreen = () => {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(e => console.error(e));
-        } else {
-            document.exitFullscreen().catch(e => console.error(e));
+    const toggleFullscreen = async () => {
+        try {
+            const doc = document as any;
+            const docEl = document.documentElement as any;
+
+            const requestFullScreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullscreen || docEl.msRequestFullscreen;
+            const cancelFullScreen = doc.exitFullscreen || doc.mozCancelFullScreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
+
+            if (!doc.fullscreenElement && !doc.mozFullScreenElement && !doc.webkitFullscreenElement && !doc.msFullscreenElement) {
+                if (requestFullScreen) {
+                    await requestFullScreen.call(docEl);
+                }
+            } else {
+                if (cancelFullScreen) {
+                    await cancelFullScreen.call(doc);
+                }
+            }
+        } catch (e) {
+            console.error("Fullscreen toggle failed:", e);
         }
     };
 
@@ -93,6 +128,7 @@ const SystemStatusBar: React.FC = () => {
 
                 {/* Fullscreen Toggle */}
                 <button 
+                    type="button"
                     onClick={toggleFullscreen}
                     className="ml-2 p-1 hover:bg-white/10 rounded transition-colors text-gray-500 hover:text-brand-cyan group"
                     title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}

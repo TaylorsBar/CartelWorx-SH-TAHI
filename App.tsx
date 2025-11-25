@@ -15,15 +15,18 @@ import Hedera from './pages/Hedera';
 import Appearance from './pages/Appearance';
 import Accessories from './pages/Accessories';
 import { AppearanceProvider } from './contexts/AppearanceContext';
-import { useVehicleTelemetry, useVehicleConnection } from './hooks/useVehicleData';
+import { useVehicleStore } from './stores/vehicleStore';
 import { useAIStore } from './stores/aiStore';
 import RacePack from './pages/RacePack';
 import GlobalAssistant from './components/GlobalAssistant';
 
 const MainLayout: React.FC = () => {
   const location = useLocation();
-  const { latestData, hasActiveFault } = useVehicleTelemetry();
-  const { startSimulation } = useVehicleConnection();
+  
+  // PERFORMANCE FIX: Select ONLY the startSimulation action.
+  // Using specific selectors prevents this component from re-rendering 
+  // when the vehicle data (which updates 20Hz) changes.
+  const startSimulation = useVehicleStore(state => state.startSimulation);
   const setContext = useAIStore(state => state.setContext);
 
   useEffect(() => {

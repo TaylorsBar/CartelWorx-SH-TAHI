@@ -20,6 +20,7 @@ export const useRaceSession = () => {
     const { latestData } = useVehicleData();
     const [session, setSession] = useState<RaceSession>(initialSessionState);
     const sessionUpdateRef = useRef<number | null>(null);
+    const isActiveRef = useRef(false);
     
     // Use a ref to access the latest data inside the rAF loop without triggering effect re-runs
     const latestDataRef = useRef(latestData);
@@ -29,21 +30,21 @@ export const useRaceSession = () => {
     }, [latestData]);
 
     const updateSession = useCallback(() => {
-        // Check refs directly for exit conditions
-        // We can't rely on state variables in closure if we want stability, 
-        // but since we setSession inside, we get the fresh state via the setter callback.
-        // However, for the rAF check, we rely on the closure being somewhat fresh or the cancellation logic.
-        // Actually, best practice for rAF loops in React is to not depend on changing scope if possible.
-        
-        // We use the functional update pattern to access the *current* session state
-        // without needing it in the dependency array.
+        if (!isActiveRef.current) {
+            return;
+        }
+
         setSession(prev => {
             if (!prev.isActive || !prev.startTime) return prev;
 
             const currentData = latestDataRef.current;
             const now = performance.now();
             const elapsedTime = now - prev.startTime;
-            const newData = [...prev.data, currentData];
+            
+            // Limit data array growth for performance (keep last 3000 points ~ 2.5 mins @ 20Hz)
+            // Prevents "Max update depth" issues caused by massive array cloning/rendering
+            const prevData = prev.data.length > 3000 ? prev.data.slice(1) : prev.data;
+            const newData = [...prevData, currentData];
 
             let { zeroToHundredTime, quarterMileTime, quarterMileSpeed } = prev;
 
@@ -79,11 +80,17 @@ export const useRaceSession = () => {
             };
         });
 
-        sessionUpdateRef.current = requestAnimationFrame(updateSession);
-    }, []); // No dependencies! stable callback.
+        // Check if still active before requesting next frame to prevent race conditions
+        if (isActiveRef.current) {
+            sessionUpdateRef.current = requestAnimationFrame(updateSession);
+        }
+    }, []);
     
     useEffect(() => {
+        isActiveRef.current = session.isActive;
+        
         if (session.isActive) {
+            // Only start loop if not already running
             if (!sessionUpdateRef.current) {
                 sessionUpdateRef.current = requestAnimationFrame(updateSession);
             }
@@ -93,9 +100,14 @@ export const useRaceSession = () => {
                 sessionUpdateRef.current = null;
             }
         }
+        
+        // Cleanup on unmount
         return () => {
-            if (sessionUpdateRef.current) cancelAnimationFrame(sessionUpdateRef.current);
-            sessionUpdateRef.current = null;
+            isActiveRef.current = false;
+            if (sessionUpdateRef.current) {
+                cancelAnimationFrame(sessionUpdateRef.current);
+                sessionUpdateRef.current = null;
+            }
         };
     }, [session.isActive, updateSession]);
 
@@ -119,12 +131,7 @@ export const useRaceSession = () => {
     const recordLap = () => {
         setSession(prev => {
             if (!prev.isActive || !prev.startTime) return prev;
-            const now = performance.now();
-            const lapTime = now - (prev.lapTimes.reduce((acc, lap) => acc + lap.time, prev.startTime!) + prev.startTime!); // logic fix for lap time accum
-
-            // Simplified Lap Logic for stability: Just take diff from last lap end or start
-            // Actually, simplified:
-            // lapTime = current elapsed - sum(previous laps)
+            
             const totalPrevTime = prev.lapTimes.reduce((acc, l) => acc + l.time, 0);
             const currentLapTime = prev.elapsedTime - totalPrevTime;
 
