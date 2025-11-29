@@ -10,7 +10,7 @@ const OBD_CHAR_WRITE_CUSTOM = "0000fff2-0000-1000-8000-00805f9b34fb";
 const OBD_CHAR_NOTIFY_CUSTOM = "0000fff1-0000-1000-8000-00805f9b34fb";
 
 // Characteristic UUIDs (Standard)
-const OBD_CHAR_WRITE_STANDARD = "00002af1-0000-1000-8000-00805f9b34fb"; // or similar, vary by implementation
+const OBD_CHAR_WRITE_STANDARD = "00002af1-0000-1000-8000-00805f9b34fb"; 
 const OBD_CHAR_NOTIFY_STANDARD = "00002af0-0000-1000-8000-00805f9b34fb"; 
 
 // Define Web Bluetooth types locally
@@ -41,7 +41,6 @@ export class ObdService {
     try {
       this.onStatusChange(ObdConnectionState.Connecting);
 
-      // 1. Request Device - Scan for both standard and custom UUIDs
       // @ts-ignore
       this.device = await navigator.bluetooth.requestDevice({
         filters: [
@@ -52,11 +51,8 @@ export class ObdService {
       });
 
       this.device!.addEventListener('gattserverdisconnected', this.handleDisconnect);
-
-      // 2. Connect GATT
       this.server = await this.device!.gatt!.connect();
 
-      // 3. Get Service & Characteristics
       let service = null;
       try {
           service = await this.server!.getPrimaryService(OBD_SERVICE_UUID_CUSTOM);
@@ -78,11 +74,9 @@ export class ObdService {
           throw new Error("Characteristics missing.");
       }
 
-      // 4. Start Notifications
       await this.notifyChar.startNotifications();
       this.notifyChar.addEventListener('characteristicvaluechanged', this.handleNotification);
 
-      // 5. Initialize ELM327
       await this.initializeElm327();
 
       this.onStatusChange(ObdConnectionState.Connected);
@@ -136,18 +130,11 @@ export class ObdService {
   private async initializeElm327() {
     this.onStatusChange(ObdConnectionState.Initializing);
     
-    // Robust Initialization Sequence
-    // 1. Reset
     await this.runCommand("AT Z"); 
-    await new Promise(r => setTimeout(r, 800)); // Longer wait for reset
+    await new Promise(r => setTimeout(r, 800)); 
 
-    // 2. Configuration
     const initCommands = [
-        "AT E0",   // Echo Off
-        "AT L0",   // Linefeeds Off
-        "AT S0",   // Spaces Off
-        "AT H0",   // Headers Off (Simplifies parsing)
-        "AT AT 1", // Adaptive Timing Auto
+        "AT E0", "AT L0", "AT S0", "AT H0", "AT AT 1", "AT SP 0"
     ];
 
     for (const cmd of initCommands) {
@@ -155,21 +142,8 @@ export class ObdService {
         await new Promise(r => setTimeout(r, 50));
     }
     
-    // 3. Protocol Setup
-    // Try to set protocol to Auto
-    await this.runCommand("AT SP 0"); 
-    
-    // Attempt to set preferred protocol if requested (AT FR is often non-standard, but added as requested)
-    // Some firmwares use AT TP or just rely on SP. We send it, if it fails (returns ?) it's fine.
-    await this.runCommand("AT FR"); 
-
-    // 4. Connection Verification
-    // Send a dummy PID request to force protocol search/negotiation
-    const testResponse = await this.runCommand("0100");
-    
-    // 5. Diagnostic Logging
-    const protocol = await this.runCommand("AT DP"); // Display Protocol
-    console.log(`OBD Init Complete. Protocol: ${protocol}. Test Resp: ${testResponse}`);
+    await this.runCommand("0100");
+    console.log(`OBD Init Complete.`);
   }
 
   public async runCommand(cmd: string): Promise<string> {
@@ -185,11 +159,9 @@ export class ObdService {
     return new Promise<string>(async (resolve, reject) => {
       this.responseResolver = resolve;
       
-      // Timeout to prevent hanging on lost packets
       const timeout = setTimeout(() => {
         this.isBusy = false;
         this.responseResolver = null;
-        // Resolve empty to keep the app alive, rather than crashing the loop
         resolve(""); 
       }, 1500); 
 
@@ -211,29 +183,72 @@ export class ObdService {
     });
   }
 
+  // --- Diagnostics ---
+
+  public async getDTCs(): Promise<string[]> {
+      // Mode 03: Confirmed Codes
+      const response03 = await this.runCommand("03");
+      // Mode 07: Pending Codes
+      const response07 = await this.runCommand("07");
+      
+      const codes = new Set<string>();
+      
+      [response03, response07].forEach(resp => {
+          const clean = resp.replace(/[\s\r\n]/g, '');
+          if (clean.includes("NODATA")) return;
+          
+          // Basic parser for CAN or ISO responses (43 xx xx xx...)
+          // Removing the Mode response prefix (e.g. 43)
+          let hexData = clean;
+          if (clean.startsWith('43') || clean.startsWith('47')) {
+              hexData = clean.substring(2);
+          }
+          
+          // Each DTC is 2 bytes (4 hex chars)
+          for (let i = 0; i < hexData.length; i += 4) {
+              const dtcHex = hexData.substring(i, i+4);
+              if (dtcHex === '0000' || dtcHex.length < 4) continue;
+              
+              const code = this.parseDTC(dtcHex);
+              if (code) codes.add(code);
+          }
+      });
+      
+      return Array.from(codes);
+  }
+
+  public async clearDTCs(): Promise<boolean> {
+      const response = await this.runCommand("04");
+      return response.includes("OK") || response.length < 5; // ELM sometimes just returns prompt
+  }
+
+  private parseDTC(hex: string): string {
+      const A = parseInt(hex.substring(0, 2), 16);
+      const B = hex.substring(2, 4);
+      
+      const typeCode = (A & 0xC0) >> 6; // First 2 bits
+      const typeChar = ['P', 'C', 'B', 'U'][typeCode];
+      
+      const digit2 = (A & 0x30) >> 4;
+      const digit3 = A & 0x0F;
+      
+      return `${typeChar}${digit2}${digit3}${B}`;
+  }
+
   // --- Data Parsers ---
 
   private extractData(response: string, servicePrefix: string): string | null {
-      // Remove spaces, nulls, and carets
       const clean = response.replace(/[\s\0>]/g, '');
-      
-      // If NO DATA, SEARCHING, or ERROR, return null immediately
       if (clean.includes("NODATA") || clean.includes("SEARCH") || clean.includes("ERROR") || clean.includes("STOPPED")) {
           return null;
       }
-
-      // Check for Service Prefix (e.g. "410C")
       const idx = clean.indexOf(servicePrefix);
       if (idx !== -1) {
           return clean.substring(idx + servicePrefix.length);
       }
-      
-      // Heuristic for raw data without headers (AT H0)
-      // If the response is hex and looks like valid data
       if (/^[0-9A-Fa-f]+$/.test(clean)) {
            return clean; 
       }
-      
       return null;
   }
 

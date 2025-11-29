@@ -83,43 +83,56 @@ export const sendMessageToAI = async (
 export const processVoiceCommand = async (
     userMessage: string,
     vehicleData: SensorDataPoint,
-    currentRoute: string
+    currentRoute: string,
+    dtcs: string[] = []
 ): Promise<VoiceActionResponse> => {
     try {
+        // Construct a dense, expert-level context summary
+        const telemetrySummary = `
+            SPEED:${vehicleData.speed.toFixed(0)} KPH | RPM:${vehicleData.rpm.toFixed(0)} | GEAR:${vehicleData.gear}
+            BOOST:${vehicleData.turboBoost.toFixed(2)} BAR | AFR:${(vehicleData.lambda * 14.7).toFixed(1)}
+            CLT:${vehicleData.engineTemp.toFixed(0)}C | OIL:${vehicleData.oilPressure.toFixed(1)} BAR
+            IAT:${vehicleData.inletAirTemp.toFixed(0)}C | VOLT:${vehicleData.batteryVoltage.toFixed(1)}V
+            ACTIVE_DTCs: [${dtcs.join(', ')}]
+        `;
+
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: `
-                User is driving/operating the vehicle. 
-                Current Route: ${currentRoute}
+                ROLE: You are KC, an AI Co-Pilot for a high-performance vehicle.
+                CONTEXT: The user is driving or tuning. Keep responses concise (under 20 words), professional, and cool.
                 
-                Live Telemetry:
-                Speed: ${vehicleData.speed.toFixed(0)} km/h, RPM: ${vehicleData.rpm.toFixed(0)}, Temp: ${vehicleData.engineTemp.toFixed(0)}C.
+                CURRENT STATE:
+                Route: ${currentRoute}
+                Telemetry: ${telemetrySummary}
 
-                User Command: "${userMessage}"
+                USER COMMAND: "${userMessage}"
 
-                Task:
-                1. Determine if the user wants to navigate to a specific screen.
-                2. Generate a concise, cool response (max 1 sentence) for the TTS engine.
-                
-                Route Map:
-                - Dashboard/Cockpit -> '/'
-                - Tuning/Dyno/Maps -> '/tuning'
+                INSTRUCTIONS:
+                1. ANALYZE the command and telemetry.
+                2. If the user asks about vehicle health, use the telemetry/DTCs to diagnose.
+                3. If the user gives a navigation command (e.g., "Go to tuning", "Show me the map"), set action to NAVIGATE.
+                4. GENERATE a JSON response.
+
+                ROUTE MAP:
+                - Dashboard -> '/'
+                - Race/Track -> '/race-pack'
+                - Tuning/Dyno -> '/tuning'
                 - Diagnostics/Codes -> '/diagnostics'
-                - Maintenance/Logs -> '/logbook'
-                - Race/Telemetry/Track -> '/race-pack'
-                - AI Core/Prediction -> '/ai-engine'
-                - AR/Vision/Camera -> '/ar-assistant'
+                - Maintenance -> '/logbook'
+                - AI/Predict -> '/ai-engine'
+                - AR/Vision -> '/ar-assistant'
                 - Security -> '/security'
-                - Settings/Appearance -> '/appearance'
+                - Settings -> '/appearance'
             `,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: {
                     type: Type.OBJECT,
                     properties: {
-                        speech: { type: Type.STRING, description: "Concise spoken response" },
-                        action: { type: Type.STRING, enum: ["NAVIGATE", "NONE"], description: "Action to take" },
-                        target: { type: Type.STRING, description: "Target route if action is NAVIGATE, else null" }
+                        speech: { type: Type.STRING, description: "Spoken response text" },
+                        action: { type: Type.STRING, enum: ["NAVIGATE", "NONE"], description: "UI Action" },
+                        target: { type: Type.STRING, description: "Route path if NAVIGATE, else null" }
                     },
                     required: ["speech", "action"]
                 }
@@ -133,7 +146,7 @@ export const processVoiceCommand = async (
     } catch (error) {
         console.error("Voice Command Error:", error);
         return {
-            speech: "Command processor offline.",
+            speech: "Command link unstable.",
             action: "NONE",
             target: null
         };

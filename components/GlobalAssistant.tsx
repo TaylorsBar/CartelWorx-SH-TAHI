@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAIStore } from '../stores/aiStore';
 import { useVehicleTelemetry } from '../hooks/useVehicleData';
+import { useVehicleStore } from '../stores/vehicleStore';
 import { sendMessageToAI, processVoiceCommand } from '../services/geminiService';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { useTextToSpeech } from '../hooks/useTextToSpeech';
@@ -35,6 +36,7 @@ const NeuralOrb: React.FC<{ state: string }> = ({ state }) => {
 const GlobalAssistant: React.FC = () => {
     const { isOpen, setIsOpen, mode, setMode, messages, addMessage, state, setState, currentContext } = useAIStore();
     const { latestData } = useVehicleTelemetry();
+    const dtcs = useVehicleStore(state => state.dtcs); // Get DTCs for diagnostics
     const { speak, cancel } = useTextToSpeech();
     const navigate = useNavigate();
     const location = useLocation();
@@ -57,7 +59,7 @@ const GlobalAssistant: React.FC = () => {
         try {
             if (mode === 'voice') {
                 // --- Voice Mode: Structured Command Processing ---
-                const response = await processVoiceCommand(text, latestData, location.pathname);
+                const response = await processVoiceCommand(text, latestData, location.pathname, dtcs);
                 
                 // Execute Action
                 if (response.action === 'NAVIGATE' && response.target) {
@@ -105,9 +107,7 @@ const GlobalAssistant: React.FC = () => {
     useEffect(() => {
         if (isListening) setState('listening');
         else if (state === 'listening' && !isListening) {
-            // Logic handled in useSpeechRecognition onResult, but if it stops unexpectedly:
-            // Keep state as listening if we are waiting for result processing? 
-            // No, setState('idle') is safer unless we are in the loop.
+            // Logic handled in useSpeechRecognition onResult
         }
     }, [isListening]);
 

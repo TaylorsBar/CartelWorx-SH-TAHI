@@ -53,8 +53,10 @@ export const useTextToSpeech = () => {
         setIsSpeaking(true);
 
         // Resume context if suspended (browser autoplay policy)
-        if (audioContextRef.current?.state === 'suspended') {
-            await audioContextRef.current.resume();
+        if (audioContextRef.current) {
+            if (audioContextRef.current.state === 'suspended') {
+                await audioContextRef.current.resume();
+            }
         }
 
         // Generate audio from Gemini
