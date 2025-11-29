@@ -1,95 +1,171 @@
 
 import React from 'react';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ComposedChart, Line } from 'recharts';
+import { DynoRun, DynoPoint } from '../../types';
 
-const DynoGraph: React.FC<{ rpm: number }> = ({ rpm }) => {
-    // Generate theoretical dyno curves
-    const data = Array.from({length: 80}, (_, i) => {
-        const r = i * 100;
-        // Torque curve (peaks around 4500)
-        let torque = 350 + Math.sin(r / 3000) * 100 - (r > 6000 ? (r-6000)*0.1 : 0);
-        if (r < 1000) torque = r * 0.35;
+interface DynoGraphProps {
+    runs: DynoRun[];
+    currentRunData?: DynoPoint[];
+    isRunning: boolean;
+}
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+        return (
+            <div className="bg-black/90 border border-gray-700 p-3 rounded shadow-xl font-mono text-xs">
+                <div className="font-bold text-gray-400 mb-2 border-b border-gray-800 pb-1">{Number(label).toFixed(0)} RPM</div>
+                {payload.map((p: any, i: number) => (
+                    <div key={i} className="flex items-center gap-2 mb-1">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }}></div>
+                        <span className="text-gray-300 w-16">{p.name}:</span>
+                        <span className="text-white font-bold">{Number(p.value).toFixed(1)}</span>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+    return null;
+};
+
+const DynoGraph: React.FC<DynoGraphProps> = ({ runs, currentRunData, isRunning }) => {
+    // 1. Prepare Data
+    // To allow multiple lines on one X-axis, we ideally need a normalized X-axis (RPM)
+    // We create a base bucket set (e.g. 100 RPM increments) and map run data to it.
+    
+    const bucketSize = 100;
+    const maxRpm = 8500;
+    
+    // Create buckets
+    const plotData = Array.from({ length: maxRpm / bucketSize }, (_, i) => {
+        const rpm = i * bucketSize;
+        const point: any = { rpm };
         
-        // Power = (Torque * RPM) / 5252 (Imperial) or similar constant. 
-        // Just approximation for viz:
-        const power = (torque * r) / 7000;
+        // Map Saved Runs
+        runs.filter(r => r.isVisible).forEach(run => {
+            const match = run.data.find(d => Math.abs(d.rpm - rpm) < bucketSize / 2);
+            if (match) {
+                point[`${run.id}_power`] = match.power;
+                point[`${run.id}_torque`] = match.torque;
+            }
+        });
+
+        // Map Live Run
+        if (isRunning && currentRunData) {
+            const match = currentRunData.find(d => Math.abs(d.rpm - rpm) < bucketSize / 2);
+            if (match) {
+                point['live_power'] = match.power;
+                point['live_torque'] = match.torque;
+            }
+        }
         
-        return {
-            rpm: r,
-            torque: torque,
-            power: power
-        };
+        return point;
     });
 
     return (
-        <div className="w-full h-full p-2">
+        <div className="w-full h-full relative bg-[#080808] rounded-lg border border-white/10 overflow-hidden">
+             {/* Grid Overlay for aesthetics */}
+             <div className="absolute inset-0 pointer-events-none opacity-5 bg-[linear-gradient(0deg,transparent_24%,rgba(255,255,255,.3)_25%,rgba(255,255,255,.3)_26%,transparent_27%,transparent_74%,rgba(255,255,255,.3)_75%,rgba(255,255,255,.3)_76%,transparent_77%,transparent),linear-gradient(90deg,transparent_24%,rgba(255,255,255,.3)_25%,rgba(255,255,255,.3)_26%,transparent_27%,transparent_74%,rgba(255,255,255,.3)_75%,rgba(255,255,255,.3)_76%,transparent_77%,transparent)] bg-[length:50px_50px]"></div>
+
              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data}>
-                    <defs>
-                        <linearGradient id="colorPower" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#00F0FF" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#00F0FF" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="colorTorque" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#FF3333" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#FF3333" stopOpacity={0}/>
-                        </linearGradient>
-                    </defs>
+                <ComposedChart data={plotData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
+                    
                     <XAxis 
                         dataKey="rpm" 
                         stroke="#444" 
-                        tick={{fill: '#666', fontSize: 10}} 
+                        tick={{fill: '#666', fontSize: 10, fontFamily: 'monospace'}} 
                         tickLine={false}
                         axisLine={false}
+                        type="number"
+                        domain={[2000, 8500]}
+                        tickCount={9}
                     />
+                    
+                    {/* Power Axis */}
                     <YAxis 
-                        yAxisId="left" 
-                        stroke="#00F0FF" 
+                        yAxisId="power" 
                         orientation="left" 
-                        tick={{fill: '#00F0FF', fontSize: 10}} 
-                        tickLine={false}
-                        axisLine={false}
-                        width={30}
-                    />
-                    <YAxis 
-                        yAxisId="right" 
-                        stroke="#FF3333" 
-                        orientation="right" 
-                        tick={{fill: '#FF3333', fontSize: 10}} 
-                        tickLine={false}
-                        axisLine={false}
-                        width={30}
-                    />
-                    <Tooltip 
-                        contentStyle={{ backgroundColor: '#111', border: '1px solid #333' }}
-                        itemStyle={{ fontSize: '12px' }}
-                        labelStyle={{ color: '#888', marginBottom: '5px' }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: '12px' }}/>
-                    <Area 
-                        yAxisId="left"
-                        type="monotone" 
-                        dataKey="power" 
-                        name="Power (HP)" 
                         stroke="#00F0FF" 
-                        strokeWidth={2}
-                        fillOpacity={1} 
-                        fill="url(#colorPower)" 
+                        tick={{fill: '#00F0FF', fontSize: 10, fontFamily: 'monospace'}} 
+                        tickLine={false}
+                        axisLine={false}
+                        width={40}
+                        domain={[0, 'auto']}
+                        label={{ value: 'POWER (HP)', angle: -90, position: 'insideLeft', fill: '#00F0FF', fontSize: 10, opacity: 0.5 }}
                     />
-                    <Area 
-                        yAxisId="right" 
-                        type="monotone" 
-                        dataKey="torque" 
-                        name="Torque (Nm)" 
+                    
+                    {/* Torque Axis */}
+                    <YAxis 
+                        yAxisId="torque" 
+                        orientation="right" 
                         stroke="#FF3333" 
-                        strokeWidth={2}
-                        fillOpacity={1} 
-                        fill="url(#colorTorque)" 
+                        tick={{fill: '#FF3333', fontSize: 10, fontFamily: 'monospace'}} 
+                        tickLine={false}
+                        axisLine={false}
+                        width={40}
+                        domain={[0, 'auto']}
+                        label={{ value: 'TORQUE (Nm)', angle: 90, position: 'insideRight', fill: '#FF3333', fontSize: 10, opacity: 0.5 }}
                     />
-                    {/* Live RPM Line */}
-                    {rpm > 0 && <line x1={0} y1={0} x2={0} y2={100} stroke="white" />} 
-                </AreaChart>
+                    
+                    <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.2)' }} />
+                    
+                    {/* Historic Runs */}
+                    {runs.filter(r => r.isVisible).map(run => (
+                        <React.Fragment key={run.id}>
+                            <Line 
+                                yAxisId="power"
+                                type="monotone" 
+                                dataKey={`${run.id}_power`} 
+                                stroke={run.color} 
+                                strokeWidth={2} 
+                                dot={false}
+                                name={`${run.name} HP`}
+                                strokeOpacity={0.7}
+                                isAnimationActive={false}
+                            />
+                            <Line 
+                                yAxisId="torque"
+                                type="monotone" 
+                                dataKey={`${run.id}_torque`} 
+                                stroke={run.color} 
+                                strokeWidth={1} 
+                                strokeDasharray="4 4"
+                                dot={false}
+                                name={`${run.name} Tq`}
+                                strokeOpacity={0.5}
+                                isAnimationActive={false}
+                            />
+                        </React.Fragment>
+                    ))}
+
+                    {/* Live Run */}
+                    {isRunning && (
+                        <>
+                            <Line 
+                                yAxisId="power"
+                                type="monotone" 
+                                dataKey="live_power" 
+                                stroke="#FFFFFF" 
+                                strokeWidth={3} 
+                                dot={false}
+                                name="Live Power"
+                                animationDuration={0}
+                            />
+                            <Line 
+                                yAxisId="torque"
+                                type="monotone" 
+                                dataKey="live_torque" 
+                                stroke="#FF0000" 
+                                strokeWidth={2} 
+                                strokeDasharray="5 5"
+                                dot={false}
+                                name="Live Torque"
+                                animationDuration={0}
+                            />
+                        </>
+                    )}
+
+                </ComposedChart>
             </ResponsiveContainer>
         </div>
     );

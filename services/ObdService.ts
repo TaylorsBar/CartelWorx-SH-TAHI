@@ -66,9 +66,7 @@ export class ObdService {
           console.log("Custom service not found, trying standard...");
           try {
               service = await this.server!.getPrimaryService(OBD_SERVICE_UUID_STANDARD);
-              // Note: Standard characteristics might vary, simplified here for commonly available characteristics
               const chars = await service.getCharacteristics();
-              // simplistic heuristic: find one with notify, one with write
               this.notifyChar = chars.find((c: any) => c.properties.notify);
               this.writeChar = chars.find((c: any) => c.properties.write || c.properties.writeWithoutResponse);
           } catch (standardErr) {
@@ -138,30 +136,44 @@ export class ObdService {
   private async initializeElm327() {
     this.onStatusChange(ObdConnectionState.Initializing);
     
-    // Standard initialization sequence
-    await this.runCommand("AT Z");   // Reset
-    await this.runCommand("AT E0");  // Echo Off
-    await this.runCommand("AT L0");  // Linefeeds Off
-    await this.runCommand("AT S0");  // Spaces Off
-    await this.runCommand("AT H0");  // Headers Off
-    await this.runCommand("AT ATS 1"); // Adaptive Timing Auto
+    // Robust Initialization Sequence
+    // 1. Reset
+    await this.runCommand("AT Z"); 
+    await new Promise(r => setTimeout(r, 800)); // Longer wait for reset
+
+    // 2. Configuration
+    const initCommands = [
+        "AT E0",   // Echo Off
+        "AT L0",   // Linefeeds Off
+        "AT S0",   // Spaces Off
+        "AT H0",   // Headers Off (Simplifies parsing)
+        "AT AT 1", // Adaptive Timing Auto
+    ];
+
+    for (const cmd of initCommands) {
+        await this.runCommand(cmd);
+        await new Promise(r => setTimeout(r, 50));
+    }
     
-    // Enhanced Protocol Selection & Verification
-    // 'AT SP 0' sets the protocol to Auto, allowing the ELM327 to search.
+    // 3. Protocol Setup
+    // Try to set protocol to Auto
     await this.runCommand("AT SP 0"); 
     
-    // 'AT DP' (Display Protocol) is useful to confirm what the adapter detected.
-    const protocol = await this.runCommand("AT DP");
-    console.debug("OBD Detected Protocol:", protocol);
+    // Attempt to set preferred protocol if requested (AT FR is often non-standard, but added as requested)
+    // Some firmwares use AT TP or just rely on SP. We send it, if it fails (returns ?) it's fine.
+    await this.runCommand("AT FR"); 
 
-    // We trigger a simple PID request (0100 - Supported PIDs) to force the protocol negotiation immediately.
-    // This ensures the connection is stable before the main polling loop starts.
-    await this.runCommand("0100"); 
+    // 4. Connection Verification
+    // Send a dummy PID request to force protocol search/negotiation
+    const testResponse = await this.runCommand("0100");
+    
+    // 5. Diagnostic Logging
+    const protocol = await this.runCommand("AT DP"); // Display Protocol
+    console.log(`OBD Init Complete. Protocol: ${protocol}. Test Resp: ${testResponse}`);
   }
 
   public async runCommand(cmd: string): Promise<string> {
     if (!this.writeChar || !this.device?.gatt?.connected) {
-      // Don't throw if we are just disconnecting, just return empty
       return "";
     }
 
@@ -173,11 +185,13 @@ export class ObdService {
     return new Promise<string>(async (resolve, reject) => {
       this.responseResolver = resolve;
       
+      // Timeout to prevent hanging on lost packets
       const timeout = setTimeout(() => {
         this.isBusy = false;
         this.responseResolver = null;
-        resolve(""); // Resolve empty on timeout to keep loop alive
-      }, 1000); 
+        // Resolve empty to keep the app alive, rather than crashing the loop
+        resolve(""); 
+      }, 1500); 
 
       try {
         const encoder = new TextEncoder();
@@ -203,18 +217,20 @@ export class ObdService {
       // Remove spaces, nulls, and carets
       const clean = response.replace(/[\s\0>]/g, '');
       
-      // ELM327 might return "41 0C 1A F2" or just "1A F2" depending on headers
-      // We look for the service prefix (e.g. "410C" for RPM)
+      // If NO DATA, SEARCHING, or ERROR, return null immediately
+      if (clean.includes("NODATA") || clean.includes("SEARCH") || clean.includes("ERROR") || clean.includes("STOPPED")) {
+          return null;
+      }
+
+      // Check for Service Prefix (e.g. "410C")
       const idx = clean.indexOf(servicePrefix);
       if (idx !== -1) {
           return clean.substring(idx + servicePrefix.length);
       }
       
-      // If headers are off, we might just get the data bytes. 
-      // Heuristic: Check length. RPM (010C) expects 2 bytes (4 hex chars).
-      // This is risky without headers, but "AT H0" usually retains the "41 0C" part in modern adapters.
-      // If we failed to find prefix, return valid data if it looks like a raw response (no "NO DATA" etc)
-      if (!clean.includes("NODATA") && !clean.includes("ERROR") && !clean.includes("STOPPED")) {
+      // Heuristic for raw data without headers (AT H0)
+      // If the response is hex and looks like valid data
+      if (/^[0-9A-Fa-f]+$/.test(clean)) {
            return clean; 
       }
       
@@ -222,153 +238,153 @@ export class ObdService {
   }
 
   public parseRpm(response: string): number {
-    // Mode 01, PID 0C. Returns 2 bytes: A, B. RPM = (256*A + B) / 4
     try {
         const data = this.extractData(response, "410C");
         if (!data || data.length < 4) return 0;
         const a = parseInt(data.substring(0, 2), 16);
         const b = parseInt(data.substring(2, 4), 16);
-        return ((a * 256) + b) / 4;
+        const val = ((a * 256) + b) / 4;
+        return isNaN(val) ? 0 : val;
     } catch { return 0; }
   }
 
   public parseSpeed(response: string): number {
-    // Mode 01, PID 0D. Returns 1 byte: A. Speed = A km/h
     try {
         const data = this.extractData(response, "410D");
         if (!data || data.length < 2) return 0;
-        return parseInt(data.substring(0, 2), 16);
+        const val = parseInt(data.substring(0, 2), 16);
+        return isNaN(val) ? 0 : val;
     } catch { return 0; }
   }
 
   public parseCoolant(response: string): number {
-      // Mode 01, PID 05. Returns 1 byte: A. Temp = A - 40
       try {
         const data = this.extractData(response, "4105");
         if (!data || data.length < 2) return 0;
-        return parseInt(data.substring(0, 2), 16) - 40;
+        const val = parseInt(data.substring(0, 2), 16) - 40;
+        return isNaN(val) ? 0 : val;
       } catch { return 0; }
   }
 
   public parseIntakeTemp(response: string): number {
-      // Mode 01, PID 0F. Returns 1 byte: A. Temp = A - 40
       try {
         const data = this.extractData(response, "410F");
         if (!data || data.length < 2) return 0;
-        return parseInt(data.substring(0, 2), 16) - 40;
+        const val = parseInt(data.substring(0, 2), 16) - 40;
+        return isNaN(val) ? 0 : val;
       } catch { return 0; }
   }
 
   public parseMap(response: string): number {
-      // Mode 01, PID 0B. Returns 1 byte: A. kPa
       try {
           const data = this.extractData(response, "410B");
           if (!data || data.length < 2) return 0;
-          return parseInt(data.substring(0, 2), 16);
+          const val = parseInt(data.substring(0, 2), 16);
+          return isNaN(val) ? 0 : val;
       } catch { return 0; }
   }
 
   public parseLoad(response: string): number {
-      // Mode 01, PID 04. Returns 1 byte: A. Load = A * 100 / 255
       try {
           const data = this.extractData(response, "4104");
           if (!data || data.length < 2) return 0;
-          return (parseInt(data.substring(0, 2), 16) * 100) / 255;
+          const val = (parseInt(data.substring(0, 2), 16) * 100) / 255;
+          return isNaN(val) ? 0 : val;
       } catch { return 0; }
   }
 
   public parseVoltage(response: string): number {
-      // Handle AT RV (e.g., "13.4V") or PID 42 (Control module voltage)
       if (response.includes("V")) {
-          return parseFloat(response.replace("V", ""));
+          const val = parseFloat(response.replace("V", ""));
+          return isNaN(val) ? 0 : val;
       }
-      // Mode 01, PID 42. Returns 2 bytes. (256A+B)/1000
       try {
           const data = this.extractData(response, "4142");
           if (data && data.length >= 4) {
                const a = parseInt(data.substring(0, 2), 16);
                const b = parseInt(data.substring(2, 4), 16);
-               return ((a * 256) + b) / 1000;
+               const val = ((a * 256) + b) / 1000;
+               return isNaN(val) ? 0 : val;
           }
       } catch { return 0; }
       return 0;
   }
 
   public parseTimingAdvance(response: string): number {
-      // PID 0E. (A - 128) / 2
       try {
           const data = this.extractData(response, "410E");
           if (!data || data.length < 2) return 0;
-          return (parseInt(data.substring(0, 2), 16) - 128) / 2;
+          const val = (parseInt(data.substring(0, 2), 16) - 128) / 2;
+          return isNaN(val) ? 0 : val;
       } catch { return 0; }
   }
 
   public parseMaf(response: string): number {
-      // PID 10. ((256*A)+B) / 100 (g/s)
       try {
           const data = this.extractData(response, "4110");
           if (!data || data.length < 4) return 0;
           const a = parseInt(data.substring(0, 2), 16);
           const b = parseInt(data.substring(2, 4), 16);
-          return ((256 * a) + b) / 100;
+          const val = ((256 * a) + b) / 100;
+          return isNaN(val) ? 0 : val;
       } catch { return 0; }
   }
 
   public parseThrottlePos(response: string): number {
-      // PID 11. A * 100 / 255
       try {
           const data = this.extractData(response, "4111");
           if (!data || data.length < 2) return 0;
-          return (parseInt(data.substring(0, 2), 16) * 100) / 255;
+          const val = (parseInt(data.substring(0, 2), 16) * 100) / 255;
+          return isNaN(val) ? 0 : val;
       } catch { return 0; }
   }
 
   public parseFuelRailPressure(response: string): number {
-      // PID 23. ((256*A)+B) * 10 (kPa gauge)
       try {
           const data = this.extractData(response, "4123");
           if (!data || data.length < 4) return 0;
           const a = parseInt(data.substring(0, 2), 16);
           const b = parseInt(data.substring(2, 4), 16);
-          return ((256 * a) + b) * 10;
+          const val = ((256 * a) + b) * 10;
+          return isNaN(val) ? 0 : val;
       } catch { return 0; }
   }
 
   public parseFuelLevel(response: string): number {
-      // PID 2F. A * 100 / 255
       try {
           const data = this.extractData(response, "412F");
           if (!data || data.length < 2) return 0;
-          return (parseInt(data.substring(0, 2), 16) * 100) / 255;
+          const val = (parseInt(data.substring(0, 2), 16) * 100) / 255;
+          return isNaN(val) ? 0 : val;
       } catch { return 0; }
   }
 
   public parseBarometricPressure(response: string): number {
-      // PID 33. A (kPa)
       try {
           const data = this.extractData(response, "4133");
           if (!data || data.length < 2) return 0;
-          return parseInt(data.substring(0, 2), 16);
+          const val = parseInt(data.substring(0, 2), 16);
+          return isNaN(val) ? 0 : val;
       } catch { return 0; }
   }
 
   public parseLambda(response: string): number {
-      // PID 44. ((256*A)+B) / 32768 (Ratio)
       try {
           const data = this.extractData(response, "4144");
           if (!data || data.length < 4) return 0;
           const a = parseInt(data.substring(0, 2), 16);
           const b = parseInt(data.substring(2, 4), 16);
-          return ((256 * a) + b) / 32768;
+          const val = ((256 * a) + b) / 32768;
+          return isNaN(val) ? 0 : val;
       } catch { return 0; }
   }
 
   public parseAmbientTemp(response: string): number {
-      // PID 46. A - 40
       try {
           const data = this.extractData(response, "4146");
           if (!data || data.length < 2) return 0;
-          return parseInt(data.substring(0, 2), 16) - 40;
+          const val = parseInt(data.substring(0, 2), 16) - 40;
+          return isNaN(val) ? 0 : val;
       } catch { return 0; }
   }
 }

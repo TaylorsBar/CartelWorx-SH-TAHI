@@ -192,3 +192,23 @@ export interface VoiceActionResponse {
     action: 'NAVIGATE' | 'NONE';
     target: string | null;
 }
+
+// --- Dyno Lab Types ---
+export interface DynoPoint {
+    rpm: number;
+    torque: number; // Nm
+    power: number; // HP
+    afr: number;
+    boost: number; // bar
+}
+
+export interface DynoRun {
+    id: string;
+    timestamp: number;
+    name: string;
+    data: DynoPoint[];
+    peakPower: number;
+    peakTorque: number;
+    color: string;
+    isVisible: boolean;
+}

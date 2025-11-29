@@ -1,10 +1,15 @@
+
 import { useState, useEffect, useRef } from 'react';
 
-const DURATION = 100; // Animation duration should be close to the data update interval
+const DURATION = 100;
 
 export const useAnimatedValue = (targetValue: number, config: { duration?: number } = {}) => {
   const { duration = DURATION } = config;
-  const [currentValue, setCurrentValue] = useState(targetValue);
+  
+  // Sanitize: Only accept valid numbers
+  const safeTarget = (typeof targetValue === 'number' && Number.isFinite(targetValue)) ? targetValue : 0;
+  
+  const [currentValue, setCurrentValue] = useState(safeTarget);
   const animationFrameRef = useRef<number | undefined>(undefined);
   const startTimeRef = useRef<number | undefined>(undefined);
   const startValueRef = useRef<number | undefined>(undefined);
@@ -18,11 +23,13 @@ export const useAnimatedValue = (targetValue: number, config: { duration?: numbe
         const elapsed = now - (startTimeRef.current ?? now);
         const progress = Math.min(elapsed / duration, 1);
         
-        // Ease-out cubic for a nice deceleration effect
         const easedProgress = 1 - Math.pow(1 - progress, 3); 
 
-        const nextValue = (startValueRef.current ?? 0) + (targetValue - (startValueRef.current ?? 0)) * easedProgress;
-        setCurrentValue(nextValue);
+        const nextValue = (startValueRef.current ?? 0) + (safeTarget - (startValueRef.current ?? 0)) * easedProgress;
+        
+        if (Number.isFinite(nextValue)) {
+            setCurrentValue(nextValue);
+        }
 
         if (progress < 1) {
           animationFrameRef.current = requestAnimationFrame(animate);
@@ -35,12 +42,15 @@ export const useAnimatedValue = (targetValue: number, config: { duration?: numbe
       animationFrameRef.current = requestAnimationFrame(animate);
     };
 
-    // Only start a new animation if the value has changed significantly
-    if (Math.abs(targetValue - currentValue) > 0.01) {
+    // Check for significant difference to prevent micro-looping
+    const diff = Math.abs(safeTarget - currentValue);
+    
+    // Only animate if diff > 0.01, otherwise just snap or do nothing
+    if (diff > 0.01) {
       startAnimation();
-    } else {
-      // Snap to the target value if it's close enough
-      setCurrentValue(targetValue);
+    } else if (diff > 0) {
+      // If tiny difference, just snap to prevent endless small updates
+      setCurrentValue(safeTarget);
     }
 
     return () => {
@@ -48,13 +58,7 @@ export const useAnimatedValue = (targetValue: number, config: { duration?: numbe
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [targetValue, duration]);
-
-  // On initial mount, set the value directly without animation
-  useEffect(() => {
-    setCurrentValue(targetValue);
-  }, []);
-
+  }, [safeTarget, duration]); // Depend ONLY on safeTarget
 
   return currentValue;
 };

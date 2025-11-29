@@ -1,126 +1,218 @@
-import React from 'react';
+
+import React, { useMemo } from 'react';
 import { useAnimatedValue } from '../../hooks/useAnimatedValue';
 
 interface HaltechTachometerProps {
   rpm: number;
   speed: number;
   gear: number;
+  redline?: number;
+  maxRpm?: number;
 }
 
-const RPM_MAX = 10000;
-const REDLINE_START = 8000;
-
-const HaltechTachometer: React.FC<HaltechTachometerProps> = ({ rpm, speed, gear }) => {
+const HaltechTachometer: React.FC<HaltechTachometerProps> = ({ 
+    rpm, 
+    speed, 
+    gear,
+    redline = 7500,
+    maxRpm = 9000 
+}) => {
   const animatedRpm = useAnimatedValue(rpm);
-  const animatedSpeed = useAnimatedValue(speed);
-
-  const rpmToAngle = (r: number) => {
-    const minAngle = -150;
-    const maxAngle = 150;
-    const ratio = Math.max(0, Math.min(r, RPM_MAX)) / RPM_MAX;
-    return minAngle + ratio * (maxAngle - minAngle);
-  };
   
-  const needleAngle = rpmToAngle(animatedRpm);
-  const redGlowOpacity = Math.max(0, (animatedRpm - 2000) / (RPM_MAX - 2000));
+  const startAngle = 135;
+  const endAngle = 405;
+  const totalAngle = endAngle - startAngle;
+  const radius = 160;
+  const cx = 200;
+  const cy = 200;
+  const strokeWidth = 28;
 
-  const redlineStartAngle = rpmToAngle(REDLINE_START);
-  const redlineEndAngle = rpmToAngle(RPM_MAX);
+  const safeRpm = Number.isFinite(animatedRpm) ? animatedRpm : 0;
+  const safeMaxRpm = maxRpm > 0 ? maxRpm : 9000;
   
-  const describeArc = (x:number, y:number, radius:number, startAngle:number, endAngle:number) => {
-    const start = {
-        x: x + radius * Math.cos((startAngle - 90) * Math.PI / 180),
-        y: y + radius * Math.sin((startAngle - 90) * Math.PI / 180)
+  const rpmRatio = Math.min(1, Math.max(0, safeRpm / safeMaxRpm));
+  const currentAngle = startAngle + (rpmRatio * totalAngle);
+  
+  const shiftLightThresholds = [
+      redline * 0.50,
+      redline * 0.65,
+      redline * 0.80,
+      redline * 0.90,
+      redline * 0.98
+  ];
+  
+  const activeShiftLights = shiftLightThresholds.filter(t => safeRpm >= t).length;
+  const isRedlineFlash = safeRpm >= redline;
+
+  const polarToCartesian = (centerX: number, centerY: number, radius: number, angleInDegrees: number) => {
+    const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
+    return {
+      x: centerX + (radius * Math.cos(angleInRadians)),
+      y: centerY + (radius * Math.sin(angleInRadians))
     };
-    const end = {
-        x: x + radius * Math.cos((endAngle - 90) * Math.PI / 180),
-        y: y + radius * Math.sin((endAngle - 90) * Math.PI / 180)
-    };
-    const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
-    return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y}`;
   }
 
+  const describeArc = (x: number, y: number, radius: number, startAngle: number, endAngle: number) => {
+      // Robust NaN check to prevent React rendering errors with SVG paths
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(radius) || !Number.isFinite(startAngle) || !Number.isFinite(endAngle)) {
+          return "M 0 0"; 
+      }
+      const start = polarToCartesian(x, y, radius, endAngle);
+      const end = polarToCartesian(x, y, radius, startAngle);
+      const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+      return [
+          "M", start.x, start.y, 
+          "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y
+      ].join(" ");
+  }
+
+  const ticks = useMemo(() => {
+      return Array.from({length: 10}).map((_, i) => {
+          const val = i * 1000;
+          const angle = startAngle + (val / safeMaxRpm) * totalAngle;
+          const p1 = polarToCartesian(cx, cy, radius - strokeWidth/2 - 2, angle);
+          const p2 = polarToCartesian(cx, cy, radius - strokeWidth/2 - 12, angle);
+          const labelPos = polarToCartesian(cx, cy, radius - 55, angle);
+          
+          const showLabel = i !== 0;
+
+          return (
+              <g key={i}>
+                  <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="white" strokeWidth="3" />
+                  {showLabel && (
+                      <text 
+                          x={labelPos.x} 
+                          y={labelPos.y} 
+                          textAnchor="middle" 
+                          dominantBaseline="middle" 
+                          fill="#eee" 
+                          className="font-display font-bold text-lg"
+                      >
+                          {i}
+                      </text>
+                  )}
+              </g>
+          );
+      });
+  }, [safeMaxRpm, startAngle, totalAngle, radius, cx, cy, strokeWidth]);
+
+  const gradientId = "rpmGradient";
 
   return (
-    <div className="relative w-full h-full max-w-[500px] aspect-square">
-      <svg viewBox="0 0 200 200" className="w-full h-full">
-        <defs>
-          <radialGradient id="brushed-metal" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
-            <stop offset="0%" style={{stopColor: '#f0f0f0'}} />
-            <stop offset="100%" style={{stopColor: 'var(--theme-haltech-silver)'}} />
-          </radialGradient>
-          <radialGradient id="red-glow" cx="50%" cy="50%" r="50%">
-            <stop offset="60%" stopColor="var(--theme-haltech-red)" stopOpacity="0.8" />
-            <stop offset="100%" stopColor="var(--theme-haltech-red)" stopOpacity="0" />
-          </radialGradient>
-           <filter id="needle-glow">
-            <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
-            <feMerge>
-                <feMergeNode in="coloredBlur"/>
-                <feMergeNode in="SourceGraphic"/>
-            </feMerge>
-          </filter>
-        </defs>
-        
-        {/* Bezel */}
-        <path d="M 20 5 L 180 5 L 195 20 L 195 180 L 180 195 L 20 195 L 5 180 L 5 20 Z" fill="url(#brushed-metal)" />
-        <path d="M 22 7 L 178 7 L 193 22 L 193 178 L 178 193 L 22 193 L 7 178 L 7 22 Z" fill="var(--theme-haltech-dark-gray)" />
-        
-        {/* Face */}
-        <circle cx="100" cy="100" r="90" fill="black" />
-        
-        {/* Red inner glow */}
-        <circle cx="100" cy="100" r="50" fill="url(#red-glow)" style={{opacity: redGlowOpacity, transition: 'opacity 0.2s ease-in-out'}} />
+    <div className="relative w-full h-full max-w-[450px] aspect-square flex items-center justify-center select-none">
+        <svg viewBox="0 0 400 400" className="w-full h-full filter drop-shadow-2xl">
+            <defs>
+                <linearGradient id={gradientId} x1="0%" y1="100%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#00F0FF" />
+                    <stop offset="40%" stopColor="#00FF00" />
+                    <stop offset="70%" stopColor="#FFFF00" />
+                    <stop offset="100%" stopColor="#FF0000" />
+                </linearGradient>
+                <filter id="glow">
+                    <feGaussianBlur stdDeviation="3.5" result="coloredBlur"/>
+                    <feMerge>
+                        <feMergeNode in="coloredBlur"/>
+                        <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                </filter>
+                <filter id="ledGlow">
+                    <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                    <feMerge>
+                        <feMergeNode in="coloredBlur"/>
+                        <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                </filter>
+            </defs>
 
-        {/* Ticks and Numbers */}
-        {Array.from({ length: 11 }).map((_, i) => {
-            const r = i * 1000;
-            const angle = rpmToAngle(r);
-            const isMajorTick = i % 1 === 0;
-            return (
-                <g key={`tick-${i}`} transform={`rotate(${angle} 100 100)`}>
-                    <line x1="100" y1="15" x2="100" y2={isMajorTick ? "25" : "20"} stroke="var(--theme-text-secondary)" strokeWidth="1.5" />
-                     {isMajorTick && <text
-                        x="100"
-                        y="35"
-                        textAnchor="middle"
-                        fill="white"
-                        fontSize="10"
-                        fontWeight="bold"
-                        className="font-sans"
-                     >
-                        {i}
-                    </text>}
+            <g transform="translate(200, 50)">
+                {[-2, -1, 0, 1, 2].map((offset, i) => {
+                    const isActive = activeShiftLights > i;
+                    const colors = ['#00FF00', '#00FF00', '#FFFF00', '#FF0000', '#FF0000'];
+                    const baseColor = colors[i];
+                    const isFlashing = isRedlineFlash && i === 4;
+                    const color = isActive ? baseColor : '#333';
+                    
+                    return (
+                        <circle 
+                            key={i}
+                            cx={offset * 25} 
+                            cy={Math.abs(offset) * 5}
+                            r={8} 
+                            fill={color} 
+                            stroke="#111" 
+                            strokeWidth="2"
+                            filter={isActive ? "url(#ledGlow)" : ""}
+                            className={isFlashing ? "animate-pulse" : ""}
+                        />
+                    )
+                })}
+            </g>
+
+            <path 
+                d={describeArc(cx, cy, radius, startAngle, endAngle)} 
+                fill="none" 
+                stroke="#1a1a1a" 
+                strokeWidth={strokeWidth}
+                strokeLinecap="butt"
+            />
+
+            <path 
+                d={describeArc(cx, cy, radius, startAngle, currentAngle)} 
+                fill="none" 
+                stroke={`url(#${gradientId})`} 
+                strokeWidth={strokeWidth}
+                strokeLinecap="butt"
+                filter="url(#glow)"
+                style={{ transition: 'd 0.1s linear' }}
+            />
+
+            {rpmRatio > 0.01 && Number.isFinite(currentAngle) && (
+                <g transform={`rotate(${currentAngle + 90} ${cx} ${cy})`} style={{ transition: 'transform 0.1s linear' }}>
+                    <rect 
+                        x={cx - 2} 
+                        y={cy - radius - strokeWidth/2 - 4} 
+                        width={4} 
+                        height={strokeWidth + 8} 
+                        fill="white" 
+                        filter="url(#glow)"
+                    />
                 </g>
-            )
-        })}
+            )}
 
-        {/* Redline Block */}
-        <path d={describeArc(100, 100, 80, redlineStartAngle, redlineEndAngle)} fill="none" stroke="var(--theme-haltech-red)" strokeWidth="10" />
+            {ticks}
 
-        {/* Center Digital Displays */}
-        <foreignObject x="50" y="80" width="100" height="60">
-            <div className="flex flex-col items-center justify-center text-center text-white w-full h-full">
-                <div className="flex items-baseline justify-between w-full px-2">
-                    <div className="flex flex-col items-center">
-                        <span className="font-sans text-xs text-gray-400">Speed</span>
-                        <span className="font-display font-bold text-3xl">{animatedSpeed.toFixed(0)}</span>
-                    </div>
-                     <div className="flex flex-col items-center">
-                        <span className="font-sans text-xs text-gray-400">Gear</span>
-                        <span className="font-display font-bold text-3xl">{gear}</span>
-                    </div>
-                </div>
-            </div>
-        </foreignObject>
-        
-        {/* Needle */}
-        <g transform={`rotate(${needleAngle} 100 100)`} style={{ transition: 'transform 0.1s cubic-bezier(.4, 0, .2, 1)' }}>
-          <path d="M 100 100 L 100 12" stroke="var(--theme-needle-color)" strokeWidth="2" strokeLinecap="round" filter="url(#needle-glow)" />
-          <path d="M 100 108 L 100 100" stroke="var(--theme-needle-color)" strokeWidth="4" strokeLinecap="round" />
-        </g>
-        <circle cx="100" cy="100" r="5" fill="#111" stroke="#333" strokeWidth="1" />
-      </svg>
+            <text 
+                x={cx} 
+                y={cy + 10} 
+                textAnchor="middle" 
+                dominantBaseline="middle" 
+                fill="white" 
+                className="font-display font-black text-9xl tracking-tighter"
+                style={{ textShadow: '0 0 20px rgba(0,240,255,0.2)' }}
+            >
+                {gear === 0 ? 'N' : gear}
+            </text>
+            
+            <text x={cx} y={cy - 55} textAnchor="middle" fill="#666" className="font-mono font-bold text-xs tracking-[0.3em]">GEAR</text>
+
+            <g transform={`translate(${cx}, ${cy + 90})`}>
+                <rect x="-60" y="-25" width="120" height="50" fill="#111" rx="4" stroke="#333" />
+                <text x="0" y="5" textAnchor="middle" fill="white" className="font-mono font-bold text-3xl">
+                    {Number.isFinite(speed) ? speed.toFixed(0) : '0'}
+                </text>
+                <text x="0" y="18" textAnchor="middle" fill="#00F0FF" className="font-bold text-[8px] uppercase tracking-widest">
+                    KM/H
+                </text>
+            </g>
+
+            <text x={cx - 90} y={cy + 30} textAnchor="middle" fill="#888" className="font-mono text-[10px]">RPM</text>
+            <text x={cx - 90} y={cy + 45} textAnchor="middle" fill="white" className="font-mono font-bold text-xl">{safeRpm.toFixed(0)}</text>
+
+            {isRedlineFlash && (
+                <circle cx={cx} cy={cy} r={radius + 20} fill="rgba(255, 0, 0, 0.1)" className="animate-pulse pointer-events-none" />
+            )}
+
+        </svg>
     </div>
   );
 };
